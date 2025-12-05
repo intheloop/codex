@@ -41,14 +41,57 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 		pluginConfig,
 	} = deps;
 
-	return async function codexFetch(input: Request | string | URL, init?: RequestInit): Promise<Response> {
-		let currentAuth = await getAuth();
+	async function ensureValidAuth(): Promise<{ auth: Auth; response?: Response }> {
+		const currentAuth = await getAuth();
 		if (shouldRefreshToken(currentAuth)) {
 			const refreshResult = await refreshAndUpdateToken(currentAuth, client);
 			if (!refreshResult.success) {
-				return refreshResult.response;
+				return { auth: currentAuth, response: refreshResult.response };
 			}
-			currentAuth = refreshResult.auth;
+			return { auth: refreshResult.auth };
+		}
+		return { auth: currentAuth };
+	}
+
+	function extractRequestMetrics(body: Record<string, unknown>) {
+		const promptCacheKey = Boolean(body.prompt_cache_key ?? body.promptCacheKey);
+		const tools = Array.isArray(body.tools) ? (body.tools as unknown[]) : [];
+		const toolChoiceRaw = body.tool_choice;
+		const toolChoice =
+			typeof toolChoiceRaw === "string"
+				? toolChoiceRaw
+				: toolChoiceRaw && typeof toolChoiceRaw === "object" && "type" in toolChoiceRaw
+					? (toolChoiceRaw as { type?: unknown }).type
+					: undefined;
+		const parallelToolCalls =
+			typeof body.parallel_tool_calls === "boolean" ? (body.parallel_tool_calls as boolean) : undefined;
+		const includeRaw = body.include;
+		const include = Array.isArray(includeRaw)
+			? (includeRaw as unknown[]).filter((value): value is string => typeof value === "string")
+			: undefined;
+		const store = typeof body.store === "boolean" ? (body.store as boolean) : undefined;
+		const reasoning = body.reasoning as { effort?: unknown; summary?: unknown } | undefined;
+		const text = body.text as { verbosity?: unknown } | undefined;
+
+		return {
+			url,
+			model: typeof body.model === "string" ? (body.model as string) : undefined,
+			promptCacheKey,
+			toolCount: tools.length,
+			toolChoice: typeof toolChoice === "string" ? toolChoice : undefined,
+			parallelToolCalls,
+			include,
+			store,
+			reasoningEffort: typeof reasoning?.effort === "string" ? (reasoning.effort as string) : undefined,
+			reasoningSummary: typeof reasoning?.summary === "string" ? (reasoning.summary as string) : undefined,
+			textVerbosity: typeof text?.verbosity === "string" ? (text.verbosity as string) : undefined,
+		};
+	}
+
+	return async function codexFetch(input: Request | string | URL, init?: RequestInit): Promise<Response> {
+		const { auth: currentAuth, response: authErrorResponse } = await ensureValidAuth();
+		if (authErrorResponse) {
+			return authErrorResponse;
 		}
 
 		const originalUrl = extractRequestUrl(input);
@@ -71,41 +114,8 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 		}
 
 		if (transformation?.body) {
-			const bodyAny = transformation.body as Record<string, unknown>;
-			const promptCacheKey = Boolean(bodyAny.prompt_cache_key ?? bodyAny.promptCacheKey);
-			const tools = Array.isArray(bodyAny.tools) ? (bodyAny.tools as unknown[]) : [];
-			const toolChoiceRaw = bodyAny.tool_choice;
-			const toolChoice =
-				typeof toolChoiceRaw === "string"
-					? toolChoiceRaw
-					: toolChoiceRaw && typeof toolChoiceRaw === "object" && "type" in toolChoiceRaw
-						? (toolChoiceRaw as { type?: unknown }).type
-						: undefined;
-			const parallelToolCalls =
-				typeof bodyAny.parallel_tool_calls === "boolean"
-					? (bodyAny.parallel_tool_calls as boolean)
-					: undefined;
-			const includeRaw = bodyAny.include;
-			const include = Array.isArray(includeRaw)
-				? (includeRaw as unknown[]).filter((value): value is string => typeof value === "string")
-				: undefined;
-			const store = typeof bodyAny.store === "boolean" ? (bodyAny.store as boolean) : undefined;
-			const reasoning = bodyAny.reasoning as { effort?: unknown; summary?: unknown } | undefined;
-			const text = bodyAny.text as { verbosity?: unknown } | undefined;
-
-			recordRequestMetrics({
-				url,
-				model: typeof bodyAny.model === "string" ? (bodyAny.model as string) : undefined,
-				promptCacheKey,
-				toolCount: tools.length,
-				toolChoice: typeof toolChoice === "string" ? toolChoice : undefined,
-				parallelToolCalls,
-				include,
-				store,
-				reasoningEffort: typeof reasoning?.effort === "string" ? (reasoning.effort as string) : undefined,
-				reasoningSummary: typeof reasoning?.summary === "string" ? (reasoning.summary as string) : undefined,
-				textVerbosity: typeof text?.verbosity === "string" ? (text.verbosity as string) : undefined,
-			});
+			const metrics = extractRequestMetrics(transformation.body as Record<string, unknown>);
+			recordRequestMetrics(metrics);
 		}
 
 		const hasTools = transformation?.body.tools !== undefined;

@@ -6,17 +6,18 @@ import { getRequestMetricsSnapshot } from "../metrics/request-metrics.js";
 const LOCALHOST = "127.0.0.1";
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-	res.statusCode = status;
-	res.setHeader("content-type", "application/json; charset=utf-8");
-	res.end(JSON.stringify(body));
+	const newRes = res;
+	newRes.statusCode = status;
+	newRes.setHeader("content-type", "application/json; charset=utf-8");
+	newRes.end(JSON.stringify(body));
 }
 
 function sendHtml(res: ServerResponse, status: number, html: string): void {
-	res.statusCode = status;
-	res.setHeader("content-type", "text/html; charset=utf-8");
-	res.end(html);
+	const newRes = res;
+	newRes.statusCode = status;
+	newRes.setHeader("content-type", "text/html; charset=utf-8");
+	newRes.end(html);
 }
-
 
 function buildIndexHtml(): string {
 	return [
