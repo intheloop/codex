@@ -37,6 +37,8 @@ export const CACHE_FILES = {
 	OPENCODE_CODEX: `${PLUGIN_PREFIX}-opencode-prompt.txt`,
 	/** OpenCode prompt metadata file */
 	OPENCODE_CODEX_META: `${PLUGIN_PREFIX}-opencode-prompt-meta.json`,
+	/** Auto-update state file */
+	AUTO_UPDATE_STATE: `${PLUGIN_PREFIX}-update-state.json`,
 } as const;
 
 /**

@@ -42,7 +42,11 @@ This plugin enables opencode to use OpenAI's Codex backend via ChatGPT Plus/Pro 
 2. Restart OpenCode (it installs plugins automatically). If prompted, run `opencode auth login` and finish the OAuth flow with your ChatGPT account.
 3. In the TUI, choose `GPT 5.1 Codex Max (OAuth)` and start chatting.
 
+Need a full walkthrough or update/cleanup steps? See [docs/getting-started.md](./docs/getting-started.md) and [docs/index.md](./docs/index.md#installation).
+
 Prefer every preset? Copy [`config/full-opencode.json`](./config/full-opencode.json) instead; it registers all GPT-5.1/GPT-5 Codex variants with recommended settings.
+
+Need live stats? A local dashboard now starts automatically (binds to 127.0.0.1 on a random port) and shows cache/request metrics plus the last few transformed requests; check logs for the URL.
 
 Want to customize? Jump to [Configuration reference](#configuration-reference).
 
@@ -108,17 +112,7 @@ Example:
 - **Reduces token consumption** by reusing cached prompts
 - **Lowers costs** significantly for multi-turn conversations
 
-### Reducing Cache Churn (keep `prompt_cache_key` stable)
-
-- Why caches reset: OpenCode rebuilds the system/developer prompt every turn; the env block includes today’s date and a ripgrep tree of your workspace, so daily rollovers or file tree changes alter the prefix and trigger a new cache key.
-- Keep the tree stable: ensure noisy/ephemeral dirs are ignored (e.g. `dist/`, `build/`, `.next/`, `coverage/`, `.cache/`, `logs/`, `tmp/`, `.turbo/`, `.vite/`, `.stryker-tmp/`, `artifacts/`, and similar). Put transient outputs under an ignored directory or `/tmp`.
-- Don’t thrash the workspace mid-session: large checkouts, mass file generation, or moving directories will change the ripgrep listing and force a cache miss.
-- Model/provider switches also change the system prompt (different base prompt), so avoid swapping models in the middle of a session if you want to reuse cache.
-- Optional: set `CODEX_APPEND_ENV_CONTEXT=1` to reattach env/files at the end of the prompt instead of stripping them. This keeps the shared prefix stable (better cache reuse) while still sending env/files as a trailing developer message. Default is off (env/files stripped to maximize stability).
-
-### Managing Caching
-
-#### Recommended: Full Configuration (Codex CLI Experience)
+## Recommended: Full Configuration (Codex CLI Experience)
 
 For the complete experience with all reasoning variants matching the official Codex CLI:
 

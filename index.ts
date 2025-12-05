@@ -46,6 +46,7 @@ import { getCodexInstructions } from "./lib/prompts/codex.js";
 import { warmCachesOnStartup, areCachesWarm } from "./lib/cache/cache-warming.js";
 import { createCodexFetcher } from "./lib/request/codex-fetcher.js";
 import { SessionManager } from "./lib/session/session-manager.js";
+import { startDashboardServer } from "./lib/server/dashboard.js";
 import type { UserConfig } from "./lib/types.js";
 
 /**
@@ -71,6 +72,9 @@ export const OpenAIAuthPlugin: Plugin = async ({ client, directory }: PluginInpu
       "The OpenAI Codex plugin is intended for personal use with your own ChatGPT Plus/Pro subscription. Ensure your usage complies with OpenAI's Terms of Service.",
     );
   }, 5000);
+
+  startDashboardServer();
+
   return {
     auth: {
       provider: PROVIDER_ID,
