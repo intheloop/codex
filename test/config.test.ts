@@ -141,6 +141,24 @@ describe("Configuration Parsing", () => {
 			expect(result.effort).toBe("low");
 			expect(result.summary).toBe("auto");
 		});
+
+		it("defaults gpt-5.2 to medium and supports xhigh", () => {
+			const defaults = getReasoningConfig("gpt-5.2", {});
+			expect(defaults.effort).toBe("medium");
+			expect(defaults.summary).toBe("auto");
+
+			const xhigh = getReasoningConfig("gpt-5.2", { reasoningEffort: "xhigh" });
+			expect(xhigh.effort).toBe("xhigh");
+			expect(xhigh.summary).toBe("auto");
+		});
+
+		it("normalizes minimal/none to low for gpt-5.2", () => {
+			const none = getReasoningConfig("gpt-5.2", { reasoningEffort: "none" });
+			expect(none.effort).toBe("low");
+
+			const minimal = getReasoningConfig("gpt-5.2", { reasoningEffort: "minimal" });
+			expect(minimal.effort).toBe("low");
+		});
 	});
 
 	describe("Model-specific behavior", () => {

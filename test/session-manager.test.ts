@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SESSION_CONFIG } from "../lib/constants.js";
 import { SessionManager } from "../lib/session/session-manager.js";
 import * as logger from "../lib/logger.js";
-import type { RequestBody, SessionContext } from "../lib/types.js";
+import type { RequestBody } from "../lib/types.js";
 
 interface BodyOptions {
 	forkId?: string;
@@ -49,26 +49,29 @@ describe("SessionManager", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-123");
 
-		const context = manager.getContext(body) as SessionContext;
-		manager.applyRequest(body, context);
+		const context = manager.getContext(body)!;
+		const { body: updatedBody, context: updatedContext } = manager.applyRequest(body, context);
 
-		expect(body.prompt_cache_key).toBe("conv-123");
-		expect(context.state.lastInput.length).toBe(1);
+		expect(updatedContext).toBeDefined();
+		expect(updatedBody.prompt_cache_key).toBe("conv-123");
+		expect(updatedContext!.state.lastInput.length).toBe(1);
 	});
 
 	it("maintains prefix across turns and reuses context", () => {
 		const manager = new SessionManager({ enabled: true });
 		const firstBody = createBody("conv-456");
 
-		let context = manager.getContext(firstBody) as SessionContext;
-		context = manager.applyRequest(firstBody, context) as SessionContext;
+		let context = manager.getContext(firstBody)!;
+		const firstApply = manager.applyRequest(firstBody, context);
+		context = firstApply.context!;
 
 		const secondBody = createBody("conv-456", 2);
-		let nextContext = manager.getContext(secondBody) as SessionContext;
+		let nextContext = manager.getContext(secondBody)!;
 		expect(nextContext.isNew).toBe(false);
-		nextContext = manager.applyRequest(secondBody, nextContext) as SessionContext;
+		const secondApply = manager.applyRequest(secondBody, nextContext);
+		nextContext = secondApply.context!;
 
-		expect(secondBody.prompt_cache_key).toBe("conv-456");
+		expect(secondApply.body.prompt_cache_key).toBe("conv-456");
 		expect(nextContext.state.lastInput.length).toBe(2);
 		expect(nextContext.state.promptCacheKey).toBe(context.state.promptCacheKey);
 	});
@@ -78,7 +81,7 @@ describe("SessionManager", () => {
 		const manager = new SessionManager({ enabled: true });
 		const baseBody = createBody("conv-789", 2);
 
-		const context = manager.getContext(baseBody) as SessionContext;
+		const context = manager.getContext(baseBody)!;
 		manager.applyRequest(baseBody, context);
 
 		const changedBody: RequestBody = {
@@ -89,7 +92,7 @@ describe("SessionManager", () => {
 			],
 		};
 
-		const nextContext = manager.getContext(changedBody) as SessionContext;
+		const nextContext = manager.getContext(changedBody)!;
 		manager.applyRequest(changedBody, nextContext);
 
 		const warnCall = warnSpy.mock.calls.find(
@@ -117,7 +120,7 @@ describe("SessionManager", () => {
 			],
 		};
 
-		const context = manager.getContext(baseBody) as SessionContext;
+		const context = manager.getContext(baseBody)!;
 		manager.applyRequest(baseBody, context);
 
 		const nextBody: RequestBody = {
@@ -128,7 +131,7 @@ describe("SessionManager", () => {
 			],
 		};
 
-		const nextContext = manager.getContext(nextBody) as SessionContext;
+		const nextContext = manager.getContext(nextBody)!;
 		manager.applyRequest(nextBody, nextContext);
 
 		const warnCall = warnSpy.mock.calls.find(
@@ -164,7 +167,7 @@ describe("SessionManager", () => {
 			],
 		};
 
-		const context = manager.getContext(fullBody) as SessionContext;
+		const context = manager.getContext(fullBody)!;
 		manager.applyRequest(fullBody, context);
 
 		const prunedBody: RequestBody = {
@@ -172,7 +175,7 @@ describe("SessionManager", () => {
 			input: fullBody.input ? fullBody.input.slice(4) : [],
 		};
 
-		const prunedContext = manager.getContext(prunedBody) as SessionContext;
+		const prunedContext = manager.getContext(prunedBody)!;
 		manager.applyRequest(prunedBody, prunedContext);
 
 		const warnCall = warnSpy.mock.calls.find(
@@ -192,18 +195,19 @@ describe("SessionManager", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-usage");
 
-		const context = manager.getContext(body) as SessionContext;
-		manager.applyRequest(body, context);
+		const context = manager.getContext(body)!;
+		const applyResult = manager.applyRequest(body, context);
+		const updatedContext = applyResult.context!;
 
-		manager.recordResponse(context, { usage: { cached_tokens: 42 } });
+		manager.recordResponse(updatedContext, { usage: { cached_tokens: 42 } });
 
-		expect(context.state.lastCachedTokens).toBe(42);
+		expect(updatedContext.state.lastCachedTokens).toBe(42);
 	});
 
 	it("reports metrics snapshot with recent sessions", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-metrics");
-		const context = manager.getContext(body) as SessionContext;
+		const context = manager.getContext(body)!;
 		manager.applyRequest(body, context);
 
 		const metrics = manager.getMetrics();
@@ -220,7 +224,7 @@ describe("SessionManager", () => {
 			prompt_cache_key: "fallback_cache_key",
 		};
 
-		const context = manager.getContext(body) as SessionContext;
+		const context = manager.getContext(body)!;
 		expect(context.enabled).toBe(true);
 		expect(context.isNew).toBe(true);
 		expect(context.state.promptCacheKey).toBe("fallback_cache_key");
@@ -236,7 +240,7 @@ describe("SessionManager", () => {
 			input: [],
 			prompt_cache_key: cacheKey,
 		};
-		const firstContext = manager.getContext(firstBody) as SessionContext;
+		const firstContext = manager.getContext(firstBody)!;
 		expect(firstContext.isNew).toBe(true);
 
 		// Second request reuses session
@@ -245,7 +249,7 @@ describe("SessionManager", () => {
 			input: [{ type: "message", role: "user", content: "second" }],
 			prompt_cache_key: cacheKey,
 		};
-		const secondContext = manager.getContext(secondBody) as SessionContext;
+		const secondContext = manager.getContext(secondBody)!;
 		expect(secondContext.isNew).toBe(false);
 		expect(secondContext.state.promptCacheKey).toBe(firstContext.state.promptCacheKey);
 	});
@@ -253,19 +257,20 @@ describe("SessionManager", () => {
 	it("creates fork-specific sessions with derived cache keys", () => {
 		const manager = new SessionManager({ enabled: true });
 		const firstAlpha = createBody("conv-fork", 1, { forkId: "alpha" });
-		let alphaContext = manager.getContext(firstAlpha) as SessionContext;
+		let alphaContext = manager.getContext(firstAlpha)!;
 		expect(alphaContext.isNew).toBe(true);
-		alphaContext = manager.applyRequest(firstAlpha, alphaContext) as SessionContext;
+		const alphaApply = manager.applyRequest(firstAlpha, alphaContext);
+		alphaContext = alphaApply.context!;
 		expect(alphaContext.state.promptCacheKey).toBe("conv-fork::fork::alpha");
 
 		const repeatAlpha = createBody("conv-fork", 2, { forkId: "alpha" });
-		let repeatedContext = manager.getContext(repeatAlpha) as SessionContext;
+		const repeatedContext = manager.getContext(repeatAlpha)!;
 		expect(repeatedContext.isNew).toBe(false);
-		repeatedContext = manager.applyRequest(repeatAlpha, repeatedContext) as SessionContext;
-		expect(repeatAlpha.prompt_cache_key).toBe("conv-fork::fork::alpha");
+		const repeatApply = manager.applyRequest(repeatAlpha, repeatedContext);
+		expect(repeatApply.body.prompt_cache_key).toBe("conv-fork::fork::alpha");
 
 		const betaBody = createBody("conv-fork", 1, { forkId: "beta" });
-		const betaContext = manager.getContext(betaBody) as SessionContext;
+		const betaContext = manager.getContext(betaBody)!;
 		expect(betaContext.isNew).toBe(true);
 		expect(betaContext.state.promptCacheKey).toBe("conv-fork::fork::beta");
 	});
@@ -273,16 +278,16 @@ describe("SessionManager", () => {
 	it("derives fork ids from parent conversation hints", () => {
 		const manager = new SessionManager({ enabled: true });
 		const parentBody = createBody("conv-fork-parent", 1, { parentConversationId: "parent-conv" });
-		const parentContext = manager.getContext(parentBody) as SessionContext;
+		const parentContext = manager.getContext(parentBody)!;
 		expect(parentContext.isNew).toBe(true);
 		expect(parentContext.state.promptCacheKey).toBe("conv-fork-parent::fork::parent-conv");
-		manager.applyRequest(parentBody, parentContext);
-		expect(parentBody.prompt_cache_key).toBe("conv-fork-parent::fork::parent-conv");
+		const parentApply = manager.applyRequest(parentBody, parentContext);
+		expect(parentApply.body.prompt_cache_key).toBe("conv-fork-parent::fork::parent-conv");
 
 		const snakeParentBody = createBody("conv-fork-parent", 1, {
 			parent_conversation_id: "parent-snake",
 		});
-		const snakeParentContext = manager.getContext(snakeParentBody) as SessionContext;
+		const snakeParentContext = manager.getContext(snakeParentBody)!;
 		expect(snakeParentContext.isNew).toBe(true);
 		expect(snakeParentContext.state.promptCacheKey).toBe("conv-fork-parent::fork::parent-snake");
 	});
@@ -290,8 +295,9 @@ describe("SessionManager", () => {
 	it("evicts sessions that exceed idle TTL", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-expire");
-		let context = manager.getContext(body) as SessionContext;
-		context = manager.applyRequest(body, context) as SessionContext;
+		let context = manager.getContext(body)!;
+		const expireApply = manager.applyRequest(body, context);
+		context = expireApply.context!;
 
 		context.state.lastUpdated = Date.now() - SESSION_CONFIG.IDLE_TTL_MS - 1000;
 		manager.pruneIdleSessions(Date.now());
@@ -306,10 +312,12 @@ describe("SessionManager", () => {
 		const totalSessions = SESSION_CONFIG.MAX_ENTRIES + 5;
 		for (let index = 0; index < totalSessions; index += 1) {
 			const body = createBody(`conv-cap-${index}`);
-			const context = manager.getContext(body) as SessionContext;
-			manager.applyRequest(body, context);
+			const context = manager.getContext(body)!;
 
-			context.state.lastUpdated -= index; // ensure ordering
+			const applyResult = manager.applyRequest(body, context);
+			const appliedContext = applyResult.context ?? context;
+
+			appliedContext.state.lastUpdated -= index; // ensure ordering
 		}
 
 		const metrics = manager.getMetrics(SESSION_CONFIG.MAX_ENTRIES + 10);

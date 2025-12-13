@@ -96,6 +96,14 @@ describe("normalizeModel", () => {
 		expect(normalizeModel("gpt51-codex-mini-high")).toBe("gpt-5.1-codex-mini");
 	});
 
+	it("should normalize gpt-5.2 presets to gpt-5.2", async () => {
+		expect(normalizeModel("gpt-5.2")).toBe("gpt-5.2");
+		expect(normalizeModel("gpt-5.2-high")).toBe("gpt-5.2");
+		expect(normalizeModel("openai/gpt52")).toBe("gpt-5.2");
+		expect(normalizeModel("gpt52")).toBe("gpt-5.2");
+		expect(normalizeModel("openai/gpt-5.2")).toBe("gpt-5.2");
+	});
+
 	it("should handle mixed case", async () => {
 		expect(normalizeModel("Gpt-5-Codex-Low")).toBe("gpt-5-codex");
 		expect(normalizeModel("GpT-5-MeDiUm")).toBe("gpt-5");
@@ -156,12 +164,30 @@ describe("getReasoningConfig (gpt-5.1-codex-max)", () => {
 		expect(none.effort).toBe("low");
 	});
 
-	it("downgrades xhigh to high on other models", async () => {
+	it("downgrades xhigh to high on unsupported models", async () => {
 		const codex = getReasoningConfig("gpt-5.1-codex", { reasoningEffort: "xhigh" });
 		expect(codex.effort).toBe("high");
 
 		const general = getReasoningConfig("gpt-5", { reasoningEffort: "xhigh" });
 		expect(general.effort).toBe("high");
+	});
+});
+
+describe("getReasoningConfig (gpt-5.2)", () => {
+	it("defaults to medium and keeps xhigh", async () => {
+		const defaults = getReasoningConfig("gpt-5.2", {});
+		expect(defaults.effort).toBe("medium");
+
+		const xhigh = getReasoningConfig("gpt-5.2", { reasoningEffort: "xhigh" });
+		expect(xhigh.effort).toBe("xhigh");
+	});
+
+	it("clamps none or minimal to low", async () => {
+		const none = getReasoningConfig("gpt-5.2", { reasoningEffort: "none" });
+		expect(none.effort).toBe("low");
+
+		const minimal = getReasoningConfig("gpt-5.2", { reasoningEffort: "minimal" });
+		expect(minimal.effort).toBe("low");
 	});
 });
 
@@ -970,8 +996,8 @@ describe("transformRequestBody", () => {
 			{ preserveIds: sessionOne.preserveIds },
 			sessionOne,
 		);
-		sessionManager.applyRequest(firstTransform.body, sessionOne);
-		const cacheKey = firstTransform.body.prompt_cache_key;
+		const firstApply = sessionManager.applyRequest(firstTransform.body, sessionOne);
+		const cacheKey = firstApply.body.prompt_cache_key;
 
 		expect(firstTransform.body.input?.[0].role).toBe("developer");
 
@@ -990,10 +1016,11 @@ describe("transformRequestBody", () => {
 			{ preserveIds: sessionTwo.preserveIds },
 			sessionTwo,
 		);
-		const appliedContext = sessionManager.applyRequest(secondTransform.body, sessionTwo);
+		const applied = sessionManager.applyRequest(secondTransform.body, sessionTwo);
+		const appliedContext = applied.context ?? sessionTwo;
 
 		expect(secondTransform.body.input?.[0].role).toBe("developer");
-		expect(secondTransform.body.prompt_cache_key).toBe(cacheKey);
+		expect(applied.body.prompt_cache_key).toBe(cacheKey);
 		expect(appliedContext?.isNew).toBe(false);
 	});
 
@@ -1157,9 +1184,9 @@ describe("transformRequestBody", () => {
 		expect(result.reasoning?.effort).toBe("xhigh");
 	});
 
-	it("should downgrade xhigh reasoning for non-codex-max models", async () => {
+	it("should keep xhigh reasoning effort for gpt-5.2", async () => {
 		const body: RequestBody = {
-			model: "gpt-5.1-codex",
+			model: "gpt-5.2",
 			input: [],
 		};
 		const userConfig: UserConfig = {
@@ -1171,7 +1198,33 @@ describe("transformRequestBody", () => {
 		const result = await transformRequestBody(body, codexInstructions, userConfig, true, {
 			preserveIds: false,
 		});
-		expect(result.reasoning?.effort).toBe("high");
+		expect(result.reasoning?.effort).toBe("xhigh");
+	});
+
+	it("should downgrade xhigh reasoning for non-codex-max models", async () => {
+		const codexBody: RequestBody = {
+			model: "gpt-5.1-codex",
+			input: [],
+		};
+		const userConfig: UserConfig = {
+			global: {
+				reasoningEffort: "xhigh",
+			},
+			models: {},
+		};
+		const codexResult = await transformRequestBody(codexBody, codexInstructions, userConfig, true, {
+			preserveIds: false,
+		});
+		expect(codexResult.reasoning?.effort).toBe("high");
+
+		const generalBody: RequestBody = {
+			model: "gpt-5",
+			input: [],
+		};
+		const generalResult = await transformRequestBody(generalBody, codexInstructions, userConfig, true, {
+			preserveIds: false,
+		});
+		expect(generalResult.reasoning?.effort).toBe("high");
 	});
 
 	it("should apply default text verbosity", async () => {
@@ -1181,6 +1234,15 @@ describe("transformRequestBody", () => {
 		};
 		const result = await transformRequestBody(body, codexInstructions);
 		expect(result.text?.verbosity).toBe("medium");
+	});
+
+	it("should default gpt-5.2 text verbosity to low", async () => {
+		const body: RequestBody = {
+			model: "gpt-5.2",
+			input: [],
+		};
+		const result = await transformRequestBody(body, codexInstructions);
+		expect(result.text?.verbosity).toBe("low");
 	});
 
 	it("should apply user text verbosity", async () => {
@@ -1802,7 +1864,7 @@ describe("transformRequestBody", () => {
 
 			const mockSessionManager = {
 				getContext: () => null,
-				applyRequest: () => null,
+				applyRequest: (requestBody: RequestBody) => ({ body: requestBody, context: undefined }),
 			} as any;
 
 			const result = await transformRequestBody(

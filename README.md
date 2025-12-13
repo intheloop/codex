@@ -42,7 +42,11 @@ This plugin enables opencode to use OpenAI's Codex backend via ChatGPT Plus/Pro 
 2. Restart OpenCode (it installs plugins automatically). If prompted, run `opencode auth login` and finish the OAuth flow with your ChatGPT account.
 3. In the TUI, choose `GPT 5.1 Codex Max (OAuth)` and start chatting.
 
+Need a full walkthrough or update/cleanup steps? See [docs/getting-started.md](./docs/getting-started.md) and [docs/index.md](./docs/index.md#installation).
+
 Prefer every preset? Copy [`config/full-opencode.json`](./config/full-opencode.json) instead; it registers all GPT-5.1/GPT-5 Codex variants with recommended settings.
+
+Need live stats? A local dashboard now starts automatically (binds to 127.0.0.1 on a random port) and shows cache/request metrics plus the last few transformed requests; check logs for the URL.
 
 Want to customize? Jump to [Configuration reference](#configuration-reference).
 
@@ -108,17 +112,7 @@ Example:
 - **Reduces token consumption** by reusing cached prompts
 - **Lowers costs** significantly for multi-turn conversations
 
-### Reducing Cache Churn (keep `prompt_cache_key` stable)
-
-- Why caches reset: OpenCode rebuilds the system/developer prompt every turn; the env block includes today’s date and a ripgrep tree of your workspace, so daily rollovers or file tree changes alter the prefix and trigger a new cache key.
-- Keep the tree stable: ensure noisy/ephemeral dirs are ignored (e.g. `dist/`, `build/`, `.next/`, `coverage/`, `.cache/`, `logs/`, `tmp/`, `.turbo/`, `.vite/`, `.stryker-tmp/`, `artifacts/`, and similar). Put transient outputs under an ignored directory or `/tmp`.
-- Don’t thrash the workspace mid-session: large checkouts, mass file generation, or moving directories will change the ripgrep listing and force a cache miss.
-- Model/provider switches also change the system prompt (different base prompt), so avoid swapping models in the middle of a session if you want to reuse cache.
-- Optional: set `CODEX_APPEND_ENV_CONTEXT=1` to reattach env/files at the end of the prompt instead of stripping them. This keeps the shared prefix stable (better cache reuse) while still sending env/files as a trailing developer message. Default is off (env/files stripped to maximize stability).
-
-### Managing Caching
-
-#### Recommended: Full Configuration (Codex CLI Experience)
+## Recommended: Full Configuration (Codex CLI Experience)
 
 For the complete experience with all reasoning variants matching the official Codex CLI:
 
@@ -441,13 +435,19 @@ For the complete experience with all reasoning variants matching the official Co
 **Global config**: `~/.config/opencode/opencode.json`
 **Project config**: `<project>/.opencode.json`
 
-This now gives you 21 model variants: the refreshed GPT-5.1 lineup (with Codex Max as the default) plus every legacy gpt-5 preset for backwards compatibility.
+This now gives you 22 model variants: the refreshed GPT-5.2 frontier preset, the GPT-5.1 lineup (with Codex Max as the default), plus every legacy gpt-5 preset for backwards compatibility.
 
 All appear in the opencode model selector as "GPT 5.1 Codex Low (OAuth)", "GPT 5 High (OAuth)", etc.
 
 ### Available Model Variants (Full Config)
 
 When using [`config/full-opencode.json`](./config/full-opencode.json), you get these GPT-5.1 presets plus the original gpt-5 variants:
+
+#### GPT-5.2 frontier preset
+
+| CLI Model ID | TUI Display Name | Reasoning Effort               | Best For                                                               |
+| ------------ | ---------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| `gpt-5.2`    | GPT 5.2 (OAuth)  | Low/Medium/High/**Extra High** | Latest frontier model with improved reasoning + general-purpose coding |
 
 #### GPT-5.1 lineup (recommended)
 
@@ -464,7 +464,7 @@ When using [`config/full-opencode.json`](./config/full-opencode.json), you get t
 | `gpt-5.1-medium`            | GPT 5.1 Medium (OAuth)            | Medium                         | Default adaptive reasoning for everyday work                                  |
 | `gpt-5.1-high`              | GPT 5.1 High (OAuth)              | High                           | Deep analysis when reliability matters most                                   |
 
-> **Extra High reasoning:** `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is exclusive to `gpt-5.1-codex-max`. Other models automatically map that option to `high` so their API calls remain valid.
+> **Extra High reasoning:** `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is honored on `gpt-5.1-codex-max` and `gpt-5.2`. Other models automatically map that option to `high` so their API calls remain valid.
 
 #### Legacy GPT-5 lineup (still supported)
 
@@ -520,7 +520,7 @@ When no configuration is specified, the plugin uses these defaults for all GPT-5
 - **`reasoningSummary: "auto"`** - Automatically adapts summary verbosity
 - **`textVerbosity: "medium"`** - Balanced output length
 
-These defaults match the official Codex CLI behavior and can be customized (see Configuration below). GPT-5.1 requests automatically start at `reasoningEffort: "none"`, while Codex/Codex Mini presets continue to clamp to their supported levels.
+These defaults match the official Codex CLI behavior and can be customized (see Configuration below). GPT-5.1 requests automatically start at `reasoningEffort: "none"`, while Codex/Codex Mini presets continue to clamp to their supported levels, and GPT-5.2 keeps `reasoningEffort: "medium"` but accepts `xhigh` while mapping `none`/`minimal` to `low`.
 
 ## Configuration Reference
 
@@ -560,7 +560,7 @@ Use the smallest working provider config if you only need one flagship model:
 
 The easiest way to get all presets is to use [`config/full-opencode.json`](./config/full-opencode.json), which provides:
 
-- 21 pre-configured model variants matching the latest Codex CLI presets (GPT-5.1 Codex Max + GPT-5.1 + GPT-5)
+- 22 pre-configured model variants matching the latest Codex CLI presets (GPT-5.2 + GPT-5.1 Codex lineup + GPT-5)
 - Optimal settings for each reasoning level
 - All variants visible in the opencode model selector
 
@@ -581,9 +581,9 @@ If you want to customize settings yourself, you can configure options at provide
 | `textVerbosity`    | `low`, `medium`, `high`                    | `medium` only                     | `medium`                          |
 | `include`          | Array of strings                           | Array of strings                  | `["reasoning.encrypted_content"]` |
 
-> **Note**: `minimal` effort is auto-normalized to `low` for gpt-5-codex (not supported by the API). `none` is only supported on GPT-5.1 general models; when used with legacy gpt-5 it is normalized to `minimal`. `xhigh` is exclusive to `gpt-5.1-codex-max`—other Codex presets automatically map it to `high`.
+> **Note**: `minimal` effort is auto-normalized to `low` for gpt-5-codex (not supported by the API). `none` is only supported on GPT-5.1 general models; when used with legacy gpt-5 it is normalized to `minimal`, and `gpt-5.2` automatically bumps `none`/`minimal` to `low`. `xhigh` is honored on `gpt-5.1-codex-max` and `gpt-5.2`—other presets automatically map it to `high`.
 >
-> † **Extra High reasoning**: `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is only available on `gpt-5.1-codex-max`.
+> † **Extra High reasoning**: `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is only available on `gpt-5.1-codex-max` and `gpt-5.2`.
 
 #### Global Configuration Example
 

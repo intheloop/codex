@@ -2,6 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { logDebug, logInfo, logWarn } from "../logger.js";
 import type { RequestBody } from "../types.js";
+import { formatPromptCacheKey } from "../utils/prompt-cache-key.js";
 
 function stableStringify(value: unknown): string {
 	if (value === null || typeof value !== "object") {
@@ -41,16 +42,16 @@ function extractString(value: unknown): string | undefined {
 	return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizeCacheKeyBase(base: string): string {
+function sanitizeMetadataBase(base: string): string {
 	const trimmed = base.trim();
 	if (!trimmed) {
-		return `cache_${randomUUID()}`;
+		return randomUUID();
 	}
 	const sanitized = trimmed.replace(/\s+/g, "-");
 	return sanitized.startsWith("cache_") ? sanitized : `cache_${sanitized}`;
 }
 
-function normalizeForkSuffix(forkId: string): string {
+function sanitizeMetadataFork(forkId: string): string {
 	const trimmed = forkId.trim();
 	if (!trimmed) return "fork";
 	return trimmed.replace(/\s+/g, "-");
@@ -174,9 +175,12 @@ export function ensurePromptCacheKey(body: RequestBody): PromptCacheKeyResult {
 
 	const derived = derivePromptCacheKeyFromBody(body);
 	if (derived.base) {
-		const baseKey = normalizeCacheKeyBase(derived.base);
-		const suffix = derived.forkId ? `-fork-${normalizeForkSuffix(derived.forkId)}` : "";
-		const finalKey = `${baseKey}${suffix}`;
+		const finalKey = formatPromptCacheKey(derived.base, derived.forkId, {
+			sanitizeBase: sanitizeMetadataBase,
+			sanitizeFork: sanitizeMetadataFork,
+			prefix: "",
+			forkDelimiter: "-fork-",
+		});
 		body.prompt_cache_key = finalKey;
 		return {
 			key: finalKey,

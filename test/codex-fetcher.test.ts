@@ -45,11 +45,16 @@ vi.mock("../lib/session/response-recorder.js", () => ({
 	recordSessionResponseFromHandledResponse: recordSessionResponseMock,
 }));
 
+vi.mock("../lib/metrics/request-metrics.js", () => ({
+	__esModule: true,
+	recordRequestMetrics: vi.fn(),
+}));
+
 describe("createCodexFetcher", () => {
 	const sessionManager = {
 		recordResponse: vi.fn(),
 		getContext: vi.fn(),
-		applyRequest: vi.fn(),
+		applyRequest: vi.fn((body, context) => ({ body, context })),
 	} as unknown as SessionManager;
 
 	beforeEach(() => {

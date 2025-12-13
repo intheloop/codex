@@ -195,6 +195,56 @@ async function fetchInstructionsWithFallback(
 	}
 }
 
+function loadFromCacheOrBundled(
+	cacheFilePath: string,
+	cachedETag: string | null,
+	cachedTag: string | null,
+	cacheFileExists: boolean,
+): string {
+	if (cacheFileExists) {
+		const cachedContent = readCachedInstructions(
+			cacheFilePath,
+			cachedETag || undefined,
+			cachedTag || undefined,
+		);
+		if (cachedContent) {
+			return cachedContent;
+		}
+		logWarn("Cached instructions unavailable; falling back to bundled copy");
+	}
+	return loadBundledInstructions();
+}
+
+function handleLatestTagFailure(
+	cacheFilePath: string,
+	cachedETag: string | null,
+	cachedTag: string | null,
+	cacheFileExists: boolean,
+	error: unknown,
+): string {
+	logWarn("Failed to get latest release tag; falling back to existing cache or bundled copy", {
+		error,
+	});
+	return loadFromCacheOrBundled(cacheFilePath, cachedETag, cachedTag, cacheFileExists);
+}
+
+function checkFreshCache(
+	cacheFilePath: string,
+	cachedETag: string | null,
+	cachedTag: string | null,
+): string | null {
+	const cachedContent = readCachedInstructions(
+		cacheFilePath,
+		cachedETag || undefined,
+		cachedTag || undefined,
+	);
+	if (cachedContent) {
+		return cachedContent;
+	}
+	logWarn("Cached Codex instructions were empty; attempting to refetch");
+	return null;
+}
+
 /**
  * Fetch Codex instructions from GitHub with ETag-based caching
  * Uses HTTP conditional requests to efficiently check for updates
@@ -226,36 +276,17 @@ export async function getCodexInstructions(): Promise<string> {
 
 	const cacheFileExists = fileExistsAndNotEmpty(cacheFilePath);
 	if (cacheIsFresh(cachedTimestamp, cacheFileExists)) {
-		const cachedContent = readCachedInstructions(
-			cacheFilePath,
-			cachedETag || undefined,
-			cachedTag || undefined,
-		);
-		if (cachedContent) {
-			return cachedContent;
+		const freshCache = checkFreshCache(cacheFilePath, cachedETag, cachedTag);
+		if (freshCache) {
+			return freshCache;
 		}
-		logWarn("Cached Codex instructions were empty; attempting to refetch");
 	}
 
 	let latestTag: string | undefined;
 	try {
 		latestTag = await getLatestReleaseTag();
 	} catch (error) {
-		logWarn("Failed to get latest release tag; falling back to existing cache or bundled copy", {
-			error,
-		});
-		if (cacheFileExists) {
-			const cachedContent = readCachedInstructions(
-				cacheFilePath,
-				cachedETag || undefined,
-				cachedTag || undefined,
-			);
-			if (cachedContent) {
-				return cachedContent;
-			}
-			logWarn("Cached instructions unavailable; falling back to bundled copy");
-		}
-		return loadBundledInstructions();
+		return handleLatestTagFailure(cacheFilePath, cachedETag, cachedTag, cacheFileExists, error);
 	}
 
 	if (!latestTag) {

@@ -165,29 +165,35 @@ export async function transformRequestForCodex(
 
 			sessionContext,
 		);
-		const appliedContext =
-			sessionManager?.applyRequest(transformResult.body, sessionContext) ?? sessionContext;
+
+		let resultingBody = transformResult.body;
+		let appliedContext = sessionContext;
+		if (sessionManager) {
+			const applyResult = sessionManager.applyRequest(transformResult.body, sessionContext);
+			resultingBody = applyResult.body;
+			appliedContext = applyResult.context ?? sessionContext;
+		}
 
 		logRequest(LOG_STAGES.AFTER_TRANSFORM, {
 			url,
 			originalModel,
-			normalizedModel: transformResult.body.model,
-			hasTools: !!transformResult.body.tools,
-			hasInput: !!transformResult.body.input,
-			inputLength: transformResult.body.input?.length,
-			reasoning: transformResult.body.reasoning as unknown,
-			textVerbosity: transformResult.body.text?.verbosity,
-			include: transformResult.body.include,
-			body: transformResult.body as unknown as Record<string, unknown>,
+			normalizedModel: resultingBody.model,
+			hasTools: !!resultingBody.tools,
+			hasInput: !!resultingBody.input,
+			inputLength: resultingBody.input?.length,
+			reasoning: resultingBody.reasoning as unknown,
+			textVerbosity: resultingBody.text?.verbosity,
+			include: resultingBody.include,
+			body: resultingBody as unknown as Record<string, unknown>,
 		});
 
 		const updatedInit: RequestInit = {
 			...init,
-			body: JSON.stringify(transformResult.body),
+			body: JSON.stringify(resultingBody),
 		};
 
 		return {
-			body: transformResult.body,
+			body: resultingBody,
 			updatedInit,
 			sessionContext: appliedContext,
 		};

@@ -293,7 +293,7 @@ describe("Fetch Helpers Module", () => {
 			const appliedContext = { ...sessionContext, isNew: false };
 			const sessionManager = {
 				getContext: vi.fn().mockReturnValue(sessionContext),
-				applyRequest: vi.fn().mockReturnValue(appliedContext),
+				applyRequest: vi.fn().mockReturnValue({ body: transformed, context: appliedContext }),
 			};
 
 			const result = await transformRequestForCodex(
@@ -334,7 +334,7 @@ describe("Fetch Helpers Module", () => {
 			};
 			const sessionManager = {
 				getContext: vi.fn().mockReturnValue(sessionContext),
-				applyRequest: vi.fn().mockReturnValue(sessionContext),
+				applyRequest: vi.fn().mockReturnValue({ body: transformed, context: sessionContext }),
 			};
 
 			await transformRequestForCodex(
@@ -374,7 +374,7 @@ describe("Fetch Helpers Module", () => {
 			};
 			const sessionManager = {
 				getContext: vi.fn().mockReturnValue(sessionContext),
-				applyRequest: vi.fn().mockReturnValue(sessionContext),
+				applyRequest: vi.fn().mockReturnValue({ body: transformed, context: sessionContext }),
 			};
 
 			await transformRequestForCodex(

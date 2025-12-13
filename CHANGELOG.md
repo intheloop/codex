@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. Dates use the ISO format (YYYY-MM-DD).
 
+## [3.4.0] - 2025-12-12
+
+### Added
+
+- GPT-5.2 support mirroring the latest Codex CLI release: model normalization, reasoning heuristics (including native `xhigh`), text-verbosity defaults, sample config/test coverage, and docs describing the new frontier preset.
+
+### Changed
+
+- README, AGENTS.md, configuration docs, and the diagnostic script now call out GPT-5.2 alongside Codex Max wherever reasoning tiers or available presets are listed.
+
+### Fixed
+
+- Requests targeting `gpt-5.2` now clamp unsupported `none`/`minimal` reasoning values to `low`, preventing invalid API calls while keeping `xhigh` available without Codex Max.
+
 ## [3.3.0] - 2025-11-19
 
 ### Added

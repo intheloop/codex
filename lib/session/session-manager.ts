@@ -1,9 +1,20 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { SESSION_CONFIG } from "../constants.js";
 import { logDebug, logWarn } from "../logger.js";
-import { PROMPT_CACHE_FORK_KEYS } from "../request/prompt-cache.js";
 import type { CodexResponsePayload, InputItem, RequestBody, SessionContext, SessionState } from "../types.js";
-import { cloneInputItems } from "../utils/clone.js";
+import {
+	computeHash,
+	itemsEqual,
+	longestSharedPrefixLength,
+	isSystemLike,
+	extractConversationId,
+	extractForkIdentifier,
+	buildSessionKey,
+	createSessionState,
+} from "./session-utils.js";
+
+const ENV_MARKER_REGEX =
+	/<env>|<\/env>|<files>|<\/files>|here is some useful information about the environment/i;
 
 export interface SessionManagerOptions {
 	enabled: boolean;
@@ -15,72 +26,6 @@ export interface SessionManagerOptions {
 
 // Clone utilities now imported from ../utils/clone.ts
 
-function computeHash(items: InputItem[]): string {
-	try {
-		return createHash("sha1").update(JSON.stringify(items)).digest("hex");
-	} catch {
-		return createHash("sha1").update(`fallback_${items.length}`).digest("hex");
-	}
-}
-
-function itemsEqual(a: InputItem | undefined, b: InputItem | undefined): boolean {
-	try {
-		return JSON.stringify(a) === JSON.stringify(b);
-	} catch {
-		return false;
-	}
-}
-
-function longestSharedPrefixLength(previous: InputItem[], current: InputItem[]): number {
-	if (previous.length === 0 || current.length === 0) {
-		return 0;
-	}
-
-	const limit = Math.min(previous.length, current.length);
-	let length = 0;
-
-	for (let i = 0; i < limit; i += 1) {
-		if (!itemsEqual(previous[i], current[i])) {
-			break;
-		}
-		length += 1;
-	}
-
-	return length;
-}
-
-function sanitizeCacheKey(candidate: string): string {
-	const trimmed = candidate.trim();
-	if (trimmed.length === 0) {
-		return `cache_${randomUUID()}`;
-	}
-	return trimmed;
-}
-
-function isSystemLike(item: InputItem | undefined): boolean {
-	if (!item || typeof item.role !== "string") {
-		return false;
-	}
-	const role = item.role.toLowerCase();
-	return role === "system" || role === "developer";
-}
-
-function isToolMessage(item: InputItem | undefined): boolean {
-	if (!item) return false;
-	const role = typeof item.role === "string" ? item.role.toLowerCase() : "";
-	const type = typeof item.type === "string" ? item.type.toLowerCase() : "";
-	const hasToolCall =
-		"tool_call_id" in (item as Record<string, unknown>) || "tool_calls" in (item as Record<string, unknown>);
-	return (
-		role === "tool" ||
-		type === "tool" ||
-		type === "tool_call" ||
-		type === "tool_result" ||
-		type === "function" ||
-		hasToolCall
-	);
-}
-
 function fingerprintInputItem(item: InputItem | undefined): string | undefined {
 	if (!item) return undefined;
 	try {
@@ -90,7 +35,7 @@ function fingerprintInputItem(item: InputItem | undefined): string | undefined {
 	}
 }
 
-function summarizeRoles(items: InputItem[]): string[] {
+function _summarizeRoles(items: InputItem[]): string[] {
 	const roles = new Set<string>();
 	for (const item of items) {
 		if (typeof item.role === "string" && item.role.trim()) {
@@ -100,7 +45,7 @@ function summarizeRoles(items: InputItem[]): string[] {
 	return Array.from(roles);
 }
 
-function findSuffixReuseStart(previous: InputItem[], current: InputItem[]): number | null {
+function _findSuffixReuseStart(previous: InputItem[], current: InputItem[]): number | null {
 	if (previous.length === 0 || current.length === 0 || current.length > previous.length) {
 		return null;
 	}
@@ -121,53 +66,62 @@ type PrefixChangeAnalysis = {
 	details: Record<string, unknown>;
 };
 
-function analyzePrefixChange(
+function _analyzePrefixChange(
 	previous: InputItem[],
 	current: InputItem[],
 	sharedPrefixLength: number,
 ): PrefixChangeAnalysis {
 	const firstPrevious = previous[sharedPrefixLength];
 	const firstIncoming = current[sharedPrefixLength];
-	const suffixReuseStart = findSuffixReuseStart(previous, current);
-	const removedSegment =
-		suffixReuseStart !== null && suffixReuseStart > 0 ? previous.slice(0, suffixReuseStart) : [];
-	const removedToolCount = removedSegment.filter((item) => isToolMessage(item)).length;
 
-	if (suffixReuseStart !== null && removedSegment.length > 0) {
-		return {
-			cause: "history_pruned",
-			details: {
-				mismatchIndex: sharedPrefixLength,
-				suffixReuseStart,
-				removedCount: removedSegment.length,
-				removedToolCount,
-				removedRoles: summarizeRoles(removedSegment),
-			},
-		};
-	}
-
-	if (isSystemLike(firstPrevious) || isSystemLike(firstIncoming)) {
+	if (isSystemLike(firstPrevious) && isSystemLike(firstIncoming)) {
 		return {
 			cause: "system_prompt_changed",
-			details: {
-				mismatchIndex: sharedPrefixLength,
-				previousRole: firstPrevious?.role,
-				incomingRole: firstIncoming?.role,
-				previousFingerprint: fingerprintInputItem(firstPrevious),
-				incomingFingerprint: fingerprintInputItem(firstIncoming),
-			},
-		};
-	}
-
-	if (firstPrevious?.role === "user" && firstIncoming?.role === "user") {
-		return {
-			cause: "user_message_changed",
 			details: {
 				mismatchIndex: sharedPrefixLength,
 				previousFingerprint: fingerprintInputItem(firstPrevious),
 				incomingFingerprint: fingerprintInputItem(firstIncoming),
 				previousRole: firstPrevious.role,
 				incomingRole: firstIncoming.role,
+			},
+		};
+	}
+
+	if (isSystemLike(firstPrevious) && !isSystemLike(firstIncoming)) {
+		return {
+			cause: "history_pruned",
+			details: {
+				mismatchIndex: sharedPrefixLength,
+				previousFingerprint: fingerprintInputItem(firstPrevious),
+				incomingFingerprint: fingerprintInputItem(firstIncoming),
+				previousRole: firstPrevious.role,
+				incomingRole: firstIncoming.role,
+			},
+		};
+	}
+
+	if (!isSystemLike(firstPrevious) && isSystemLike(firstIncoming)) {
+		return {
+			cause: "system_prompt_changed",
+			details: {
+				mismatchIndex: sharedPrefixLength,
+				previousFingerprint: fingerprintInputItem(firstPrevious),
+				incomingFingerprint: fingerprintInputItem(firstIncoming),
+				previousRole: firstPrevious?.role,
+				incomingRole: firstIncoming.role,
+			},
+		};
+	}
+
+	if (!isSystemLike(firstPrevious) && !isSystemLike(firstIncoming)) {
+		return {
+			cause: "user_message_changed",
+			details: {
+				mismatchIndex: sharedPrefixLength,
+				previousFingerprint: fingerprintInputItem(firstPrevious),
+				incomingFingerprint: fingerprintInputItem(firstIncoming),
+				previousRole: firstPrevious?.role,
+				incomingRole: firstIncoming?.role,
 			},
 		};
 	}
@@ -194,77 +148,6 @@ function buildPrefixForkIds(
 	};
 }
 
-function extractConversationId(body: RequestBody): string | undefined {
-	const metadata = body.metadata as Record<string, unknown> | undefined;
-	const bodyAny = body as Record<string, unknown>;
-	const possibleKeys = [
-		"conversation_id",
-		"conversationId",
-		"thread_id",
-		"threadId",
-		"session_id",
-		"sessionId",
-		"chat_id",
-		"chatId",
-	];
-
-	for (const key of possibleKeys) {
-		const fromMetadata = metadata?.[key];
-		if (typeof fromMetadata === "string" && fromMetadata.length > 0) {
-			return fromMetadata;
-		}
-
-		const fromBody = bodyAny[key];
-		if (typeof fromBody === "string" && fromBody.length > 0) {
-			return fromBody;
-		}
-	}
-
-	return undefined;
-}
-
-function extractForkIdentifier(body: RequestBody): string | undefined {
-	const metadata = body.metadata as Record<string, unknown> | undefined;
-	const bodyAny = body as Record<string, unknown>;
-	const normalize = (value: unknown): string | undefined => {
-		if (typeof value !== "string") {
-			return undefined;
-		}
-		const trimmed = value.trim();
-		return trimmed.length > 0 ? trimmed : undefined;
-	};
-
-	for (const key of PROMPT_CACHE_FORK_KEYS) {
-		const fromMetadata = normalize(metadata?.[key]);
-		if (fromMetadata) {
-			return fromMetadata;
-		}
-		const fromBody = normalize(bodyAny[key]);
-		if (fromBody) {
-			return fromBody;
-		}
-	}
-
-	return undefined;
-}
-
-function buildSessionKey(conversationId: string, forkId: string | undefined): string {
-	if (!forkId) {
-		return conversationId;
-	}
-	return `${conversationId}::fork::${forkId}`;
-}
-
-// Keep in sync with ensurePromptCacheKey logic in request-transformer.ts so session-managed
-// and stateless flows derive identical cache keys.
-function buildPromptCacheKey(conversationId: string, forkId: string | undefined): string {
-	const sanitized = sanitizeCacheKey(conversationId);
-	if (!forkId) {
-		return sanitized;
-	}
-	return `${sanitized}::fork::${forkId}`;
-}
-
 export interface SessionMetricsSnapshot {
 	enabled: boolean;
 	totalSessions: number;
@@ -274,6 +157,11 @@ export interface SessionMetricsSnapshot {
 		lastCachedTokens: number | null;
 		lastUpdated: number;
 	}>;
+}
+
+export interface SessionApplyResult {
+	body: RequestBody;
+	context?: SessionContext;
 }
 
 export class SessionManager {
@@ -295,209 +183,52 @@ export class SessionManager {
 		const conversationId = extractConversationId(body);
 		const forkId = extractForkIdentifier(body);
 		if (!conversationId) {
-			// Fall back to host-provided prompt_cache_key if no metadata ID is available
-			const hostCacheKey = (body as any).prompt_cache_key || (body as any).promptCacheKey;
+			const hostCacheKey = body.prompt_cache_key || body.promptCacheKey;
 			if (hostCacheKey && typeof hostCacheKey === "string") {
-				// Use the existing cache key as session identifier to maintain continuity
-				const existing = this.sessions.get(hostCacheKey);
-				if (existing) {
-					return {
-						sessionId: hostCacheKey,
-						enabled: true,
-						preserveIds: true,
-						isNew: false,
-						state: existing,
-					};
-				}
-
-				const state: SessionState = {
-					id: hostCacheKey,
-					promptCacheKey: sanitizeCacheKey(hostCacheKey),
-					store: this.options.forceStore ?? false,
-					lastInput: [],
-					lastPrefixHash: null,
-					lastUpdated: Date.now(),
-				};
-
-				this.sessions.set(hostCacheKey, state);
-				this.pruneSessions();
-				return {
-					sessionId: hostCacheKey,
-					enabled: true,
-					preserveIds: true,
-					isNew: true,
-					state,
-				};
+				const existingState = this.sessions.get(hostCacheKey);
+				const state = existingState ?? this.resetSessionInternal(hostCacheKey);
+				return state ? this.buildContext(state, !existingState) : undefined;
 			}
 			return undefined;
 		}
 
 		const sessionKey = buildSessionKey(conversationId, forkId);
-		const promptCacheKey = buildPromptCacheKey(conversationId, forkId);
-
 		const existing = this.findExistingSession(sessionKey);
+
 		if (existing) {
-			return {
-				sessionId: existing.id,
-				enabled: true,
-				preserveIds: true,
-				isNew: false,
-				state: existing,
-			};
-		}
-
-		const state: SessionState = {
-			id: sessionKey,
-			promptCacheKey,
-			store: this.options.forceStore ?? false,
-			lastInput: [],
-			lastPrefixHash: null,
-			lastUpdated: Date.now(),
-		};
-
-		this.sessions.set(sessionKey, state);
-		this.pruneSessions();
-
-		return {
-			sessionId: sessionKey,
-			enabled: true,
-			preserveIds: true,
-			isNew: true,
-			state,
-		};
-	}
-
-	public applyRequest(body: RequestBody, context: SessionContext | undefined): SessionContext | undefined {
-		if (!context?.enabled) {
-			return context;
-		}
-
-		const state = context.state;
-		// eslint-disable-next-line no-param-reassign
-		body.prompt_cache_key = state.promptCacheKey;
-		if (state.store) {
-			// eslint-disable-next-line no-param-reassign
-			body.store = true;
-		}
-
-		const input = cloneInputItems(body.input || []);
-		const inputHash = computeHash(input);
-
-		if (state.lastInput.length === 0) {
-			state.lastInput = input;
-			state.lastPrefixHash = inputHash;
-			state.lastUpdated = Date.now();
-			logDebug("SessionManager: initialized session", {
-				sessionId: state.id,
-				promptCacheKey: state.promptCacheKey,
-				inputCount: input.length,
-			});
-			return context;
-		}
-
-		const sharedPrefixLength = longestSharedPrefixLength(state.lastInput, input);
-		const hasFullPrefixMatch = sharedPrefixLength === state.lastInput.length;
-
-		if (!hasFullPrefixMatch) {
-			const prefixAnalysis = analyzePrefixChange(state.lastInput, input, sharedPrefixLength);
-			if (sharedPrefixLength === 0) {
-				logWarn("SessionManager: prefix mismatch detected, regenerating cache key", {
-					sessionId: state.id,
-					promptCacheKey: state.promptCacheKey,
-					sharedPrefixLength,
-					previousItems: state.lastInput.length,
-					incomingItems: input.length,
-					previousHash: state.lastPrefixHash,
-					incomingHash: inputHash,
-					prefixCause: prefixAnalysis.cause,
-					...prefixAnalysis.details,
+			const currentInput = Array.isArray(body.input) ? body.input : [];
+			const analysis = this.analyzeInputChange(existing.lastInput, currentInput);
+			if (analysis.cause !== "unknown") {
+				logWarn("SessionManager: prefix mismatch detected", {
+					sessionId: existing.id,
+					prefixCause: analysis.cause,
+					...analysis.details,
 				});
-
-				const refreshed = this.resetSessionInternal(state.id, true);
-				if (!refreshed) {
-					return undefined;
-				}
-				refreshed.lastInput = input;
-				refreshed.lastPrefixHash = inputHash;
-				refreshed.lastUpdated = Date.now();
-				// eslint-disable-next-line no-param-reassign
-				body.prompt_cache_key = refreshed.promptCacheKey;
-				if (refreshed.store) {
-					// eslint-disable-next-line no-param-reassign
-					body.store = true;
-				}
-				return {
-					sessionId: refreshed.id,
-					enabled: true,
-					preserveIds: true,
-					isNew: true,
-					state: refreshed,
-				};
 			}
 
-			const sharedPrefix = input.slice(0, sharedPrefixLength);
-			const { sessionId: forkSessionId, promptCacheKey: forkPromptCacheKey } = buildPrefixForkIds(
-				state.id,
-				state.promptCacheKey,
-				sharedPrefix,
-			);
-			const forkState: SessionState = {
-				id: forkSessionId,
-				promptCacheKey: forkPromptCacheKey,
-				store: state.store,
-				lastInput: input,
-				lastPrefixHash: inputHash,
-				lastUpdated: Date.now(),
-				lastCachedTokens: state.lastCachedTokens,
-				bridgeInjected: state.bridgeInjected,
-			};
-
-			this.sessions.set(forkSessionId, forkState);
-			logWarn("SessionManager: prefix mismatch detected, forking session", {
-				sessionId: state.id,
-				promptCacheKey: state.promptCacheKey,
-				forkSessionId,
-				forkPromptCacheKey,
-				sharedPrefixLength,
-				previousItems: state.lastInput.length,
-				incomingItems: input.length,
-				previousHash: state.lastPrefixHash,
-				incomingHash: inputHash,
-				prefixCause: prefixAnalysis.cause,
-				...prefixAnalysis.details,
-			});
-			// eslint-disable-next-line no-param-reassign
-			body.prompt_cache_key = forkPromptCacheKey;
-			if (forkState.store) {
-				// eslint-disable-next-line no-param-reassign
-				body.store = true;
+			if (analysis.cause === "system_prompt_changed") {
+				const prefixForkIds = buildPrefixForkIds(existing.id, existing.promptCacheKey, existing.lastInput);
+				const forkState = this.resetSessionInternal(prefixForkIds.sessionId, false);
+				return forkState ? this.buildContext(forkState, true) : undefined;
 			}
-			return {
-				sessionId: forkSessionId,
-				enabled: true,
-				preserveIds: true,
-				isNew: true,
-				state: forkState,
-			};
 		}
 
-		state.lastInput = input;
-		state.lastPrefixHash = inputHash;
-		state.lastUpdated = Date.now();
-
-		return context;
+		const state = existing || this.resetSessionInternal(sessionKey);
+		return state ? this.buildContext(state, !existing) : undefined;
 	}
 
-	public recordResponse(
-		context: SessionContext | undefined,
-		payload: CodexResponsePayload | undefined,
-	): void {
-		if (!context?.enabled || !payload) {
+	public recordResponse(session: string | SessionContext, response: CodexResponsePayload): void {
+		if (!this.options.enabled) {
 			return;
 		}
 
-		const state = context.state;
-		const cachedTokens = payload.usage?.cached_tokens;
+		const sessionId = typeof session === "string" ? session : session.sessionId;
+		const state = typeof session === "string" ? this.sessions.get(sessionId) : session.state;
+		if (!state) {
+			return;
+		}
+
+		const cachedTokens = response.usage?.cached_tokens;
 		if (typeof cachedTokens === "number") {
 			state.lastCachedTokens = cachedTokens;
 			logDebug("SessionManager: response usage", {
@@ -508,7 +239,43 @@ export class SessionManager {
 		state.lastUpdated = Date.now();
 	}
 
+	public applyRequest(body: RequestBody, context?: SessionContext): SessionApplyResult {
+		const clonedBody = this.cloneRequestBody(body);
+
+		if (!this.options.enabled || !context) {
+			return { body: clonedBody, context };
+		}
+
+		const existingState = this.sessions.get(context.sessionId) ?? context.state;
+		if (!existingState) {
+			return { body: clonedBody, context };
+		}
+
+		const nextInput = Array.isArray(clonedBody.input) ? this.cloneInputItems(clonedBody.input) : [];
+		const newState: SessionState = {
+			...existingState,
+			lastInput: nextInput,
+			lastPrefixHash: nextInput.length ? computeHash(nextInput) : null,
+			lastUpdated: Date.now(),
+		};
+		this.sessions.set(newState.id, newState);
+
+		const updatedContext: SessionContext = {
+			...context,
+			isNew: false,
+			state: newState,
+		};
+
+		if (newState.promptCacheKey) {
+			clonedBody.prompt_cache_key = newState.promptCacheKey;
+			clonedBody.promptCacheKey = newState.promptCacheKey;
+		}
+
+		return { body: clonedBody, context: updatedContext };
+	}
+
 	public getMetrics(limit = 5): SessionMetricsSnapshot {
+		this.pruneSessions();
 		const maxEntries = Math.max(0, limit);
 		const recentSessions = Array.from(this.sessions.values())
 			.sort((a, b) => b.lastUpdated - a.lastUpdated)
@@ -524,6 +291,16 @@ export class SessionManager {
 			enabled: this.options.enabled,
 			totalSessions: this.sessions.size,
 			recentSessions,
+		};
+	}
+
+	private buildContext(state: SessionState, isNew: boolean): SessionContext {
+		return {
+			sessionId: state.id,
+			enabled: this.options.enabled,
+			preserveIds: true,
+			isNew,
+			state,
 		};
 	}
 
@@ -584,20 +361,103 @@ export class SessionManager {
 
 	private resetSessionInternal(sessionId: string, forceRandomKey = false): SessionState | undefined {
 		const existing = this.sessions.get(sessionId);
-		const keySeed = existing?.id ?? sessionId;
-		const promptCacheKey = forceRandomKey
-			? `cache_${randomUUID()}`
-			: sanitizeCacheKey(keySeed === sessionId ? sessionId : keySeed);
-		const state: SessionState = {
-			id: sessionId,
-			promptCacheKey,
-			store: this.options.forceStore ?? false,
-			lastInput: [],
-			lastPrefixHash: null,
-			lastUpdated: Date.now(),
-		};
+		const state = createSessionState(sessionId, this.options.forceStore ?? false, forceRandomKey, existing);
 
 		this.sessions.set(sessionId, state);
 		return state;
+	}
+
+	private analyzeInputChange(previous: InputItem[], current: InputItem[]): PrefixChangeAnalysis {
+		const normalizedPrevious = this.normalizeInputForComparison(previous);
+		const normalizedCurrent = this.normalizeInputForComparison(current);
+		const sharedPrefixLength = longestSharedPrefixLength(normalizedPrevious, normalizedCurrent);
+		const baseAnalysis = _analyzePrefixChange(normalizedPrevious, normalizedCurrent, sharedPrefixLength);
+		const details: Record<string, unknown> = {
+			...baseAnalysis.details,
+			sharedPrefixLength,
+		};
+
+		if (baseAnalysis.cause === "history_pruned") {
+			const removedCount = Math.max(0, normalizedPrevious.length - normalizedCurrent.length);
+			if (removedCount > 0) {
+				details.removedCount = removedCount;
+				details.removedRoles = _summarizeRoles(normalizedPrevious.slice(0, removedCount));
+			}
+			const suffixReuseStart = _findSuffixReuseStart(normalizedPrevious, normalizedCurrent);
+			if (suffixReuseStart !== null) {
+				details.suffixReuseStart = suffixReuseStart;
+			}
+		}
+
+		return {
+			cause: baseAnalysis.cause,
+			details,
+		};
+	}
+
+	private cloneRequestBody(body: RequestBody): RequestBody {
+		const cloned: RequestBody = {
+			...body,
+			metadata: body.metadata ? { ...body.metadata } : undefined,
+			include: body.include ? [...body.include] : undefined,
+			text: body.text ? { ...body.text } : undefined,
+			reasoning: body.reasoning ? { ...body.reasoning } : undefined,
+		};
+
+		if (Array.isArray(body.input)) {
+			cloned.input = this.cloneInputItems(body.input);
+		}
+
+		return cloned;
+	}
+
+	private cloneInputItems(input: InputItem[]): InputItem[] {
+		try {
+			return JSON.parse(JSON.stringify(input)) as InputItem[];
+		} catch {
+			return input.map((item) => ({ ...item }));
+		}
+	}
+
+	private normalizeInputForComparison(items: InputItem[]): InputItem[] {
+		return items.filter((item) => !this.isEnvContextMessage(item));
+	}
+
+	private extractContentText(content: unknown): string {
+		if (typeof content === "string") {
+			return content;
+		}
+		if (Array.isArray(content)) {
+			return content
+				.map((segment) => {
+					if (typeof segment === "string") {
+						return segment;
+					}
+					if (segment && typeof segment === "object" && "text" in segment) {
+						const value = (segment as { text?: unknown }).text;
+						return typeof value === "string" ? value : "";
+					}
+					return "";
+				})
+				.join("\n");
+		}
+		return "";
+	}
+
+	private isEnvContextMessage(item: InputItem | undefined): boolean {
+		if (!item || typeof item.role !== "string") {
+			return false;
+		}
+		const role = item.role.toLowerCase();
+		if (role !== "system" && role !== "developer") {
+			return false;
+		}
+
+		const normalizedText = this.extractContentText(item.content).toLowerCase();
+		if (!normalizedText) {
+			return false;
+		}
+
+		return ENV_MARKER_REGEX.test(normalizedText);
 	}
 }
