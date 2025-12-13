@@ -49,11 +49,12 @@ describe("SessionManager", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-123");
 
-		const context = manager.getContext(body) as SessionContext;
+		const context = manager.getContext(body)!;
 		const { body: updatedBody, context: updatedContext } = manager.applyRequest(body, context);
 
+		expect(updatedContext).toBeDefined();
 		expect(updatedBody.prompt_cache_key).toBe("conv-123");
-		expect(updatedContext?.state.lastInput.length).toBe(1);
+		expect(updatedContext!.state.lastInput.length).toBe(1);
 	});
 
 	it("maintains prefix across turns and reuses context", () => {
@@ -309,7 +310,8 @@ describe("SessionManager", () => {
 		const totalSessions = SESSION_CONFIG.MAX_ENTRIES + 5;
 		for (let index = 0; index < totalSessions; index += 1) {
 			const body = createBody(`conv-cap-${index}`);
-			const context = manager.getContext(body) as SessionContext;
+			const context = manager.getContext(body)!;
+
 			manager.applyRequest(body, context);
 
 			context.state.lastUpdated -= index; // ensure ordering
