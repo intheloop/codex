@@ -435,7 +435,7 @@ For the complete experience with all reasoning variants matching the official Co
 **Global config**: `~/.config/opencode/opencode.json`
 **Project config**: `<project>/.opencode.json`
 
-This now gives you 21 model variants: the refreshed GPT-5.1 lineup (with Codex Max as the default) plus every legacy gpt-5 preset for backwards compatibility.
+This now gives you 22 model variants: the refreshed GPT-5.2 frontier preset, the GPT-5.1 lineup (with Codex Max as the default), plus every legacy gpt-5 preset for backwards compatibility.
 
 All appear in the opencode model selector as "GPT 5.1 Codex Low (OAuth)", "GPT 5 High (OAuth)", etc.
 
@@ -581,9 +581,9 @@ If you want to customize settings yourself, you can configure options at provide
 | `textVerbosity`    | `low`, `medium`, `high`                    | `medium` only                     | `medium`                          |
 | `include`          | Array of strings                           | Array of strings                  | `["reasoning.encrypted_content"]` |
 
-> **Note**: `minimal` effort is auto-normalized to `low` for gpt-5-codex (not supported by the API). `none` is only supported on GPT-5.1 general models; when used with legacy gpt-5 it is normalized to `minimal`. `xhigh` is exclusive to `gpt-5.1-codex-max`—other Codex presets automatically map it to `high`.
+> **Note**: `minimal` effort is auto-normalized to `low` for gpt-5-codex (not supported by the API). `none` is only supported on GPT-5.1 general models; when used with legacy gpt-5 it is normalized to `minimal`, and `gpt-5.2` automatically bumps `none`/`minimal` to `low`. `xhigh` is honored on `gpt-5.1-codex-max` and `gpt-5.2`—other presets automatically map it to `high`.
 >
-> † **Extra High reasoning**: `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is only available on `gpt-5.1-codex-max`.
+> † **Extra High reasoning**: `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is only available on `gpt-5.1-codex-max` and `gpt-5.2`.
 
 #### Global Configuration Example
 
