@@ -13,6 +13,9 @@ import {
 	createSessionState,
 } from "./session-utils.js";
 
+const ENV_MARKER_REGEX =
+	/<env>|<\/env>|<files>|<\/files>|here is some useful information about the environment/i;
+
 export interface SessionManagerOptions {
 	enabled: boolean;
 	/**
@@ -154,6 +157,11 @@ export interface SessionMetricsSnapshot {
 		lastCachedTokens: number | null;
 		lastUpdated: number;
 	}>;
+}
+
+export interface SessionApplyResult {
+	body: RequestBody;
+	context?: SessionContext;
 }
 
 export class SessionManager {
