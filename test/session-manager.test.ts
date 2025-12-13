@@ -267,7 +267,6 @@ describe("SessionManager", () => {
 		let repeatedContext = manager.getContext(repeatAlpha)!;
 		expect(repeatedContext.isNew).toBe(false);
 		const repeatApply = manager.applyRequest(repeatAlpha, repeatedContext);
-		repeatedContext = repeatApply.context!;
 		expect(repeatApply.body.prompt_cache_key).toBe("conv-fork::fork::alpha");
 
 		const betaBody = createBody("conv-fork", 1, { forkId: "beta" });
