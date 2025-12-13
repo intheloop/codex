@@ -422,21 +422,12 @@ export class SessionManager {
 		return items.filter((item) => !this.isEnvContextMessage(item));
 	}
 
-	private isEnvContextMessage(item: InputItem | undefined): boolean {
-		if (!item || typeof item.role !== "string") {
-			return false;
-		}
-		const role = item.role.toLowerCase();
-		if (role !== "system" && role !== "developer") {
-			return false;
-		}
-
-		const content = item.content;
-		let text = "";
+	private extractContentText(content: unknown): string {
 		if (typeof content === "string") {
-			text = content;
-		} else if (Array.isArray(content)) {
-			text = content
+			return content;
+		}
+		if (Array.isArray(content)) {
+			return content
 				.map((segment) => {
 					if (typeof segment === "string") {
 						return segment;
@@ -449,14 +440,23 @@ export class SessionManager {
 				})
 				.join("\n");
 		}
+		return "";
+	}
 
-		const normalized = text.toLowerCase();
-		return (
-			normalized.includes("<env>") ||
-			normalized.includes("</env>") ||
-			normalized.includes("<files>") ||
-			normalized.includes("</files>") ||
-			normalized.includes("here is some useful information about the environment")
-		);
+	private isEnvContextMessage(item: InputItem | undefined): boolean {
+		if (!item || typeof item.role !== "string") {
+			return false;
+		}
+		const role = item.role.toLowerCase();
+		if (role !== "system" && role !== "developer") {
+			return false;
+		}
+
+		const normalizedText = this.extractContentText(item.content).toLowerCase();
+		if (!normalizedText) {
+			return false;
+		}
+
+		return ENV_MARKER_REGEX.test(normalizedText);
 	}
 }

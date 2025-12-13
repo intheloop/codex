@@ -52,18 +52,69 @@ async function parseLocalVersion(): Promise<string | null> {
 	return null;
 }
 
-function isNewerVersion(current: string, latest: string): boolean {
-	const toParts = (v: string) => v.split(".").map((part) => Number.parseInt(part, 10));
-	const currentParts = toParts(current);
-	const latestParts = toParts(latest);
-	const max = Math.max(currentParts.length, latestParts.length);
-	for (let index = 0; index < max; index += 1) {
-		const cur = currentParts[index] ?? 0;
-		const lat = latestParts[index] ?? 0;
-		if (lat > cur) return true;
-		if (lat < cur) return false;
+const NUMERIC_IDENTIFIER = /^\d+$/;
+
+function parseSemver(version: string): { core: number[]; prerelease: (number | string)[] } {
+	const sanitized = version.trim().replace(/^v/i, "");
+	const [corePart, prereleasePart] = sanitized.split("-", 2);
+	const core = corePart.split(".").map((segment) => Number.parseInt(segment, 10) || 0);
+	const prerelease = prereleasePart
+		? prereleasePart
+				.split(".")
+				.map((identifier) => (NUMERIC_IDENTIFIER.test(identifier) ? Number(identifier) : identifier))
+		: [];
+	return { core, prerelease };
+}
+
+function compareSemver(a: string, b: string): number {
+	const parsedA = parseSemver(a);
+	const parsedB = parseSemver(b);
+	const maxLength = Math.max(parsedA.core.length, parsedB.core.length);
+	for (let index = 0; index < maxLength; index += 1) {
+		const partA = parsedA.core[index] ?? 0;
+		const partB = parsedB.core[index] ?? 0;
+		if (partA > partB) return 1;
+		if (partA < partB) return -1;
 	}
-	return false;
+
+	const prereleaseA = parsedA.prerelease;
+	const prereleaseB = parsedB.prerelease;
+	if (prereleaseA.length === 0 && prereleaseB.length === 0) {
+		return 0;
+	}
+	if (prereleaseA.length === 0) {
+		return 1;
+	}
+	if (prereleaseB.length === 0) {
+		return -1;
+	}
+
+	const maxPre = Math.max(prereleaseA.length, prereleaseB.length);
+	for (let index = 0; index < maxPre; index += 1) {
+		const idA = prereleaseA[index];
+		const idB = prereleaseB[index];
+		if (idA === undefined) return -1;
+		if (idB === undefined) return 1;
+		if (typeof idA === "number" && typeof idB === "number") {
+			if (idA > idB) return 1;
+			if (idA < idB) return -1;
+			continue;
+		}
+		if (typeof idA === "number") {
+			return -1;
+		}
+		if (typeof idB === "number") {
+			return 1;
+		}
+		if (idA > idB) return 1;
+		if (idA < idB) return -1;
+	}
+
+	return 0;
+}
+
+function isNewerVersion(current: string, latest: string): boolean {
+	return compareSemver(latest, current) > 0;
 }
 
 async function fetchLatestVersion(): Promise<string | null> {

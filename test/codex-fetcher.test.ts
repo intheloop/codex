@@ -54,7 +54,7 @@ describe("createCodexFetcher", () => {
 	const sessionManager = {
 		recordResponse: vi.fn(),
 		getContext: vi.fn(),
-		applyRequest: vi.fn(),
+		applyRequest: vi.fn((body, context) => ({ body, context })),
 	} as unknown as SessionManager;
 
 	beforeEach(() => {

@@ -195,12 +195,12 @@ async function fetchInstructionsWithFallback(
 	}
 }
 
-async function loadFromCacheOrBundled(
+function loadFromCacheOrBundled(
 	cacheFilePath: string,
 	cachedETag: string | null,
 	cachedTag: string | null,
 	cacheFileExists: boolean,
-): Promise<string> {
+): string {
 	if (cacheFileExists) {
 		const cachedContent = readCachedInstructions(
 			cacheFilePath,
@@ -215,24 +215,24 @@ async function loadFromCacheOrBundled(
 	return loadBundledInstructions();
 }
 
-async function handleLatestTagFailure(
+function handleLatestTagFailure(
 	cacheFilePath: string,
 	cachedETag: string | null,
 	cachedTag: string | null,
 	cacheFileExists: boolean,
 	error: unknown,
-): Promise<string> {
+): string {
 	logWarn("Failed to get latest release tag; falling back to existing cache or bundled copy", {
 		error,
 	});
 	return loadFromCacheOrBundled(cacheFilePath, cachedETag, cachedTag, cacheFileExists);
 }
 
-async function checkFreshCache(
+function checkFreshCache(
 	cacheFilePath: string,
 	cachedETag: string | null,
 	cachedTag: string | null,
-): Promise<string | null> {
+): string | null {
 	const cachedContent = readCachedInstructions(
 		cacheFilePath,
 		cachedETag || undefined,
@@ -276,7 +276,7 @@ export async function getCodexInstructions(): Promise<string> {
 
 	const cacheFileExists = fileExistsAndNotEmpty(cacheFilePath);
 	if (cacheIsFresh(cachedTimestamp, cacheFileExists)) {
-		const freshCache = await checkFreshCache(cacheFilePath, cachedETag, cachedTag);
+		const freshCache = checkFreshCache(cacheFilePath, cachedETag, cachedTag);
 		if (freshCache) {
 			return freshCache;
 		}
