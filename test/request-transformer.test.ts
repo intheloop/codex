@@ -96,6 +96,12 @@ describe("normalizeModel", () => {
 		expect(normalizeModel("gpt51-codex-mini-high")).toBe("gpt-5.1-codex-mini");
 	});
 
+	it("should normalize gpt-5.2 presets to gpt-5.2", async () => {
+		expect(normalizeModel("gpt-5.2")).toBe("gpt-5.2");
+		expect(normalizeModel("gpt-5.2-high")).toBe("gpt-5.2");
+		expect(normalizeModel("openai/gpt52")).toBe("gpt-5.2");
+	});
+
 	it("should handle mixed case", async () => {
 		expect(normalizeModel("Gpt-5-Codex-Low")).toBe("gpt-5-codex");
 		expect(normalizeModel("GpT-5-MeDiUm")).toBe("gpt-5");

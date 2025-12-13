@@ -12,6 +12,7 @@ export function normalizeModel(model: string | undefined): string {
 
 	const contains = (needle: string) => sanitized.includes(needle);
 	const hasGpt51 = contains("gpt-5-1") || sanitized.includes("gpt51");
+	const hasGpt52 = contains("gpt-5-2") || sanitized.includes("gpt52");
 	const hasCodexMax = contains("codex-max") || contains("codexmax");
 
 	if (contains("gpt-5-1-codex-mini") || (hasGpt51 && contains("codex-mini"))) {
@@ -28,6 +29,9 @@ export function normalizeModel(model: string | undefined): string {
 	}
 	if (hasGpt51) {
 		return "gpt-5.1";
+	}
+	if (hasGpt52) {
+		return "gpt-5.2";
 	}
 	if (contains("gpt-5-codex-mini") || contains("codex-mini-latest")) {
 		return "gpt-5.1-codex-mini";
@@ -56,6 +60,7 @@ type ModelFlags = {
 	normalized: string;
 	normalizedOriginal: string;
 	isGpt51: boolean;
+	isGpt52: boolean;
 	isCodexMini: boolean;
 	isCodexMax: boolean;
 	isCodexFamily: boolean;
@@ -66,6 +71,7 @@ function classifyModel(originalModel: string | undefined): ModelFlags {
 	const normalized = normalizeModel(originalModel);
 	const normalizedOriginal = originalModel?.toLowerCase() ?? normalized;
 	const isGpt51 = normalized.startsWith("gpt-5.1");
+	const isGpt52 = normalized.startsWith("gpt-5.2");
 	const isCodexMiniSlug = normalized === "gpt-5.1-codex-mini" || normalized === "codex-mini-latest";
 	const isLegacyCodexMini = normalizedOriginal.includes("codex-mini-latest");
 	const isCodexMini =
@@ -88,6 +94,7 @@ function classifyModel(originalModel: string | undefined): ModelFlags {
 		normalized,
 		normalizedOriginal,
 		isGpt51,
+		isGpt52,
 		isCodexMini,
 		isCodexMax,
 		isCodexFamily,
@@ -98,6 +105,9 @@ function classifyModel(originalModel: string | undefined): ModelFlags {
 function defaultEffortFor(flags: ModelFlags): ReasoningConfig["effort"] {
 	if (flags.isGpt51 && !flags.isCodexFamily && !flags.isCodexMini) {
 		return "none";
+	}
+	if (flags.isGpt52) {
+		return "medium";
 	}
 	if (flags.isCodexMini) {
 		return "medium";
@@ -112,7 +122,7 @@ function applyRequestedEffort(
 	requested: ReasoningConfig["effort"],
 	flags: ModelFlags,
 ): ReasoningConfig["effort"] {
-	if (requested === "xhigh" && !flags.isCodexMax) {
+	if (requested === "xhigh" && !(flags.isCodexMax || flags.isGpt52)) {
 		return "high";
 	}
 	return requested;
@@ -137,6 +147,13 @@ function normalizeEffortForModel(
 	}
 
 	if (flags.isCodexFamily) {
+		if (effort === "minimal" || effort === "none") {
+			return "low";
+		}
+		return effort;
+	}
+
+	if (flags.isGpt52) {
 		if (effort === "minimal" || effort === "none") {
 			return "low";
 		}
