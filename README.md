@@ -443,6 +443,12 @@ All appear in the opencode model selector as "GPT 5.1 Codex Low (OAuth)", "GPT 5
 
 When using [`config/full-opencode.json`](./config/full-opencode.json), you get these GPT-5.1 presets plus the original gpt-5 variants:
 
+#### GPT-5.2 frontier preset
+
+| CLI Model ID | TUI Display Name | Reasoning Effort               | Best For                                                               |
+| ------------ | ---------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| `gpt-5.2`    | GPT 5.2 (OAuth)  | Low/Medium/High/**Extra High** | Latest frontier model with improved reasoning + general-purpose coding |
+
 #### GPT-5.1 lineup (recommended)
 
 | CLI Model ID                | TUI Display Name                  | Reasoning Effort               | Best For                                                                      |
@@ -458,7 +464,7 @@ When using [`config/full-opencode.json`](./config/full-opencode.json), you get t
 | `gpt-5.1-medium`            | GPT 5.1 Medium (OAuth)            | Medium                         | Default adaptive reasoning for everyday work                                  |
 | `gpt-5.1-high`              | GPT 5.1 High (OAuth)              | High                           | Deep analysis when reliability matters most                                   |
 
-> **Extra High reasoning:** `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is exclusive to `gpt-5.1-codex-max`. Other models automatically map that option to `high` so their API calls remain valid.
+> **Extra High reasoning:** `reasoningEffort: "xhigh"` provides maximum computational effort for complex, multi-step problems and is honored on `gpt-5.1-codex-max` and `gpt-5.2`. Other models automatically map that option to `high` so their API calls remain valid.
 
 #### Legacy GPT-5 lineup (still supported)
 
@@ -554,7 +560,7 @@ Use the smallest working provider config if you only need one flagship model:
 
 The easiest way to get all presets is to use [`config/full-opencode.json`](./config/full-opencode.json), which provides:
 
-- 21 pre-configured model variants matching the latest Codex CLI presets (GPT-5.1 Codex Max + GPT-5.1 + GPT-5)
+- 22 pre-configured model variants matching the latest Codex CLI presets (GPT-5.2 + GPT-5.1 Codex lineup + GPT-5)
 - Optimal settings for each reasoning level
 - All variants visible in the opencode model selector
 

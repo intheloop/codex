@@ -145,9 +145,10 @@ export async function transformRequestBody(
 		...reasoningConfig,
 	};
 
+	const defaultTextVerbosity = normalizedModel.startsWith("gpt-5.2") ? "low" : "medium";
 	body.text = {
 		...body.text,
-		verbosity: modelConfig.textVerbosity || "medium",
+		verbosity: modelConfig.textVerbosity || defaultTextVerbosity,
 	};
 
 	body.include = modelConfig.include || ["reasoning.encrypted_content"];
