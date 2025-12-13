@@ -21,7 +21,7 @@ const logWarnMock = vi.hoisted(() => vi.fn());
 const logErrorMock = vi.hoisted(() => vi.fn());
 const sessionManagerInstance = vi.hoisted(() => ({
 	getContext: vi.fn(() => ({ sessionId: "session-1", preserveIds: true, enabled: true })),
-	applyRequest: vi.fn((_body, ctx) => ({ ...ctx, applied: true })),
+	applyRequest: vi.fn((_body, ctx) => ({ body: _body, context: { ...ctx, applied: true } })),
 	recordResponse: vi.fn(),
 }));
 const SessionManagerMock = vi.hoisted(() => vi.fn(() => sessionManagerInstance));
