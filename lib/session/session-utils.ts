@@ -1,12 +1,25 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { PROMPT_CACHE_FORK_KEYS } from "../request/prompt-cache.js";
 import type { InputItem, RequestBody, SessionState } from "../types.js";
+import { formatPromptCacheKey } from "../utils/prompt-cache-key.js";
 
 export function computeHash(items: InputItem[]): string {
 	try {
 		return createHash("sha1").update(JSON.stringify(items)).digest("hex");
 	} catch {
-		return createHash("sha1").update(`fallback_${items.length}`).digest("hex");
+		const roleSummary = items
+			.map((item) => {
+				if (typeof item?.role === "string" && item.role.trim()) {
+					return item.role.trim().toLowerCase();
+				}
+				if (typeof (item as { id?: unknown }).id === "string") {
+					return `id:${(item as { id: string }).id}`;
+				}
+				return typeof item;
+			})
+			.join("|");
+		const nonce = randomBytes(8).toString("hex");
+		return createHash("sha1").update(`fallback_${items.length}_${roleSummary}_${nonce}`).digest("hex");
 	}
 }
 
@@ -123,11 +136,12 @@ export function buildSessionKey(conversationId: string, forkId: string | undefin
 // Keep in sync with ensurePromptCacheKey logic in request-transformer.ts so session-managed
 // and stateless flows derive identical cache keys.
 export function buildPromptCacheKey(conversationId: string, forkId: string | undefined): string {
-	const sanitized = sanitizeCacheKey(conversationId);
-	if (!forkId) {
-		return sanitized;
-	}
-	return `${sanitized}::fork::${forkId}`;
+	return formatPromptCacheKey(conversationId, forkId, {
+		prefix: "",
+		forkDelimiter: "::fork::",
+		sanitizeBase: sanitizeCacheKey,
+		sanitizeFork: sanitizeCacheKey,
+	});
 }
 
 export function createSessionState(
@@ -137,9 +151,7 @@ export function createSessionState(
 	existing?: SessionState,
 ): SessionState {
 	const keySeed = existing?.id ?? sessionId;
-	const promptCacheKey = forceRandomKey
-		? `cache_${randomUUID()}`
-		: sanitizeCacheKey(keySeed === sessionId ? sessionId : keySeed);
+	const promptCacheKey = forceRandomKey ? `cache_${randomUUID()}` : sanitizeCacheKey(keySeed);
 
 	return {
 		id: sessionId,

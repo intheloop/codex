@@ -162,18 +162,10 @@ export class SessionManager {
 		const conversationId = extractConversationId(body);
 		const forkId = extractForkIdentifier(body);
 		if (!conversationId) {
-			// Fall back to host-provided prompt_cache_key if no metadata ID is available
 			const hostCacheKey = (body as any).prompt_cache_key || (body as any).promptCacheKey;
 			if (hostCacheKey && typeof hostCacheKey === "string") {
-				const state = this.resetSessionInternal(hostCacheKey, true);
-				if (!state) {
-					return undefined;
-				}
-				return {
-					sessionId: state.id,
-					promptCacheKey: state.promptCacheKey,
-					store: state.store,
-				};
+				const state = this.resetSessionInternal(hostCacheKey);
+				return state ? this.buildContext(state, true) : undefined;
 			}
 			return undefined;
 		}
@@ -182,39 +174,25 @@ export class SessionManager {
 		const existing = this.findExistingSession(sessionKey);
 
 		if (existing) {
-			const analysis = this.analyzeInputChange(existing.lastInput, body.messages || []);
+			const currentInput = Array.isArray(body.input) ? body.input : [];
+			const analysis = this.analyzeInputChange(existing.lastInput, currentInput);
 			if (analysis.cause !== "unknown") {
-				logDebug("SessionManager: detected input change", {
+				logWarn("SessionManager: prefix mismatch detected", {
 					sessionId: existing.id,
-					cause: analysis.cause,
-					details: analysis.details,
+					prefixCause: analysis.cause,
+					...analysis.details,
 				});
 			}
 
 			if (analysis.cause === "system_prompt_changed") {
 				const prefixForkIds = buildPrefixForkIds(existing.id, existing.promptCacheKey, existing.lastInput);
 				const forkState = this.resetSessionInternal(prefixForkIds.sessionId, false);
-				if (!forkState) {
-					return undefined;
-				}
-				return {
-					sessionId: forkState.id,
-					promptCacheKey: forkState.promptCacheKey,
-					store: forkState.store,
-				};
+				return forkState ? this.buildContext(forkState, true) : undefined;
 			}
 		}
 
 		const state = existing || this.resetSessionInternal(sessionKey);
-		if (!state) {
-			return undefined;
-		}
-
-		return {
-			sessionId: state.id,
-			promptCacheKey: state.promptCacheKey,
-			store: state.store,
-		};
+		return state ? this.buildContext(state, !existing) : undefined;
 	}
 
 	public recordResponse(sessionId: string, response: CodexResponsePayload): void {
