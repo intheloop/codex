@@ -293,7 +293,7 @@ describe("Fetch Helpers Module", () => {
 			const appliedContext = { ...sessionContext, isNew: false };
 			const sessionManager = {
 				getContext: vi.fn().mockReturnValue(sessionContext),
-				applyRequest: vi.fn().mockReturnValue(appliedContext),
+				applyRequest: vi.fn().mockReturnValue({ body: transformed, context: sessionContext }),
 			};
 
 			const result = await transformRequestForCodex(

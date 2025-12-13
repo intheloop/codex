@@ -282,8 +282,8 @@ describe("SessionManager", () => {
 		const parentContext = manager.getContext(parentBody)!;
 		expect(parentContext.isNew).toBe(true);
 		expect(parentContext.state.promptCacheKey).toBe("conv-fork-parent::fork::parent-conv");
-		manager.applyRequest(parentBody, parentContext);
-		expect(parentBody.prompt_cache_key).toBe("conv-fork-parent::fork::parent-conv");
+		const parentApply = manager.applyRequest(parentBody, parentContext);
+		expect(parentApply.body.prompt_cache_key).toBe("conv-fork-parent::fork::parent-conv");
 
 		const snakeParentBody = createBody("conv-fork-parent", 1, {
 			parent_conversation_id: "parent-snake",
@@ -297,7 +297,8 @@ describe("SessionManager", () => {
 		const manager = new SessionManager({ enabled: true });
 		const body = createBody("conv-expire");
 		let context = manager.getContext(body)!;
-		context = manager.applyRequest(body, context) as SessionContext;
+		const expireApply = manager.applyRequest(body, context);
+		context = expireApply.context!;
 
 		context.state.lastUpdated = Date.now() - SESSION_CONFIG.IDLE_TTL_MS - 1000;
 		manager.pruneIdleSessions(Date.now());
@@ -314,9 +315,10 @@ describe("SessionManager", () => {
 			const body = createBody(`conv-cap-${index}`);
 			const context = manager.getContext(body)!;
 
-			manager.applyRequest(body, context);
+			const applyResult = manager.applyRequest(body, context);
+			const appliedContext = applyResult.context ?? context;
 
-			context.state.lastUpdated -= index; // ensure ordering
+			appliedContext.state.lastUpdated -= index; // ensure ordering
 		}
 
 		const metrics = manager.getMetrics(SESSION_CONFIG.MAX_ENTRIES + 10);

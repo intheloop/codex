@@ -1862,7 +1862,7 @@ describe("transformRequestBody", () => {
 
 			const mockSessionManager = {
 				getContext: () => null,
-				applyRequest: () => null,
+				applyRequest: (requestBody: RequestBody) => ({ body: requestBody, context: undefined }),
 			} as any;
 
 			const result = await transformRequestBody(
