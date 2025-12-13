@@ -99,13 +99,26 @@ function _analyzePrefixChange(
 
 	if (!isSystemLike(firstPrevious) && isSystemLike(firstIncoming)) {
 		return {
-			cause: "user_message_changed",
+			cause: "system_prompt_changed",
 			details: {
 				mismatchIndex: sharedPrefixLength,
 				previousFingerprint: fingerprintInputItem(firstPrevious),
 				incomingFingerprint: fingerprintInputItem(firstIncoming),
 				previousRole: firstPrevious?.role,
 				incomingRole: firstIncoming.role,
+			},
+		};
+	}
+
+	if (!isSystemLike(firstPrevious) && !isSystemLike(firstIncoming)) {
+		return {
+			cause: "user_message_changed",
+			details: {
+				mismatchIndex: sharedPrefixLength,
+				previousFingerprint: fingerprintInputItem(firstPrevious),
+				incomingFingerprint: fingerprintInputItem(firstIncoming),
+				previousRole: firstPrevious?.role,
+				incomingRole: firstIncoming?.role,
 			},
 		};
 	}
@@ -164,8 +177,9 @@ export class SessionManager {
 		if (!conversationId) {
 			const hostCacheKey = (body as any).prompt_cache_key || (body as any).promptCacheKey;
 			if (hostCacheKey && typeof hostCacheKey === "string") {
-				const state = this.resetSessionInternal(hostCacheKey);
-				return state ? this.buildContext(state, true) : undefined;
+				const existingState = this.sessions.get(hostCacheKey);
+				const state = existingState ?? this.resetSessionInternal(hostCacheKey);
+				return state ? this.buildContext(state, !existingState) : undefined;
 			}
 			return undefined;
 		}
@@ -243,6 +257,7 @@ export class SessionManager {
 	}
 
 	public getMetrics(limit = 5): SessionMetricsSnapshot {
+		this.pruneSessions();
 		const maxEntries = Math.max(0, limit);
 		const recentSessions = Array.from(this.sessions.values())
 			.sort((a, b) => b.lastUpdated - a.lastUpdated)
