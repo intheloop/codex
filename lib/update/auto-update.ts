@@ -13,6 +13,10 @@ assert;
 const REGISTRY_URL = "https://registry.npmjs.org/@openhax/codex";
 const REGISTRY_TIMEOUT_MS = 5000;
 const AUTO_UPDATE_TTL_MS = 15 * 60 * 1000; // match cache TTL
+const PACKAGE_VERSION =
+	typeof (packageInfo as { version?: string }).version === "string"
+		? (packageInfo as { version: string }).version
+		: null;
 
 const UPDATE_STATE_PATH = getOpenCodePath("cache", CACHE_FILES.AUTO_UPDATE_STATE);
 
@@ -42,17 +46,14 @@ function shouldThrottle(state: UpdateState, now: number): boolean {
 }
 
 async function parseLocalVersion(): Promise<string | null> {
-	try {
-		const pkgPath = join(__dirname, "..", "package.json");
-		const data = await readFile(pkgPath, "utf8");
-		const parsed = JSON.parse(data) as { version?: string };
-		return parsed.version ?? null;
-	} catch (error) {
-		logWarn("Failed to locate local package version", {
-			error: error instanceof Error ? error.message : String(error),
-		});
-		return null;
+	if (typeof PACKAGE_VERSION === "string") {
+		return PACKAGE_VERSION;
 	}
+
+	logWarn("Failed to locate local package version", {
+		error: "version not found",
+	});
+	return null;
 }
 
 function isNewerVersion(current: string, latest: string): boolean {

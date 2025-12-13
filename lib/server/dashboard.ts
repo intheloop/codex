@@ -6,17 +6,15 @@ import { getRequestMetricsSnapshot } from "../metrics/request-metrics.js";
 const LOCALHOST = "127.0.0.1";
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-	const newRes = res;
-	newRes.statusCode = status;
-	newRes.setHeader("content-type", "application/json; charset=utf-8");
-	newRes.end(JSON.stringify(body));
+	res.statusCode = status;
+	res.setHeader("content-type", "application/json; charset=utf-8");
+	res.end(JSON.stringify(body));
 }
 
 function sendHtml(res: ServerResponse, status: number, html: string): void {
-	const newRes = res;
-	newRes.statusCode = status;
-	newRes.setHeader("content-type", "text/html; charset=utf-8");
-	newRes.end(html);
+	res.statusCode = status;
+	res.setHeader("content-type", "text/html; charset=utf-8");
+	res.end(html);
 }
 
 function buildIndexHtml(): string {
@@ -50,7 +48,15 @@ function buildIndexHtml(): string {
 		"</table>",
 		"</section>",
 		"<script>",
+		'const ESCAPE_LOOKUP = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };',
+		'ESCAPE_LOOKUP[\'"\'] = "&quot;";',
+		'ESCAPE_LOOKUP["\'"] = "&#39;";',
+		"function escapeHtml(value) {",
+		"  return String(value ?? '').replace(/[&<>\\\"']/g, (char) => ESCAPE_LOOKUP[char] || char);",
+		"}",
+
 		"async function load() {",
+
 		"  try {",
 		"    const metrics = await fetch('/metrics').then(r => r.json());",
 		"    const recent = await fetch('/recent').then(r => r.json());",
@@ -65,7 +71,13 @@ function buildIndexHtml(): string {
 		"      const cache = item.promptCacheKey ? 'yes' : 'no';",
 		"      const tools = item.toolCount + (item.toolChoice ? ' (' + item.toolChoice + ')' : '');",
 		"      const reasoning = (item.reasoningEffort || item.reasoningSummary || item.textVerbosity) ? 'yes' : 'no';",
-		"      tr.innerHTML = '<td>' + ts + '</td>' + '<td>' + model + '</td>' + '<td><code>' + url + '</code></td>' + '<td>' + cache + '</td>' + '<td>' + tools + '</td>' + '<td>' + reasoning + '</td>';",
+		"      const safeTs = escapeHtml(ts);",
+		"      const safeModel = escapeHtml(model);",
+		"      const safeUrl = escapeHtml(url);",
+		"      const safeCache = escapeHtml(cache);",
+		"      const safeTools = escapeHtml(tools);",
+		"      const safeReasoning = escapeHtml(reasoning);",
+		"      tr.innerHTML = '<td>' + safeTs + '</td>' + '<td>' + safeModel + '</td>' + '<td><code>' + safeUrl + '</code></td>' + '<td>' + safeCache + '</td>' + '<td>' + safeTools + '</td>' + '<td>' + safeReasoning + '</td>';",
 		"      tbody.appendChild(tr);",
 		"    }",
 		"  } catch (err) {",
