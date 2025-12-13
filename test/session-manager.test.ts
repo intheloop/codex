@@ -50,10 +50,10 @@ describe("SessionManager", () => {
 		const body = createBody("conv-123");
 
 		const context = manager.getContext(body) as SessionContext;
-		manager.applyRequest(body, context);
+		const { body: updatedBody, context: updatedContext } = manager.applyRequest(body, context);
 
-		expect(body.prompt_cache_key).toBe("conv-123");
-		expect(context.state.lastInput.length).toBe(1);
+		expect(updatedBody.prompt_cache_key).toBe("conv-123");
+		expect(updatedContext?.state.lastInput.length).toBe(1);
 	});
 
 	it("maintains prefix across turns and reuses context", () => {
