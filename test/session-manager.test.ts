@@ -61,14 +61,16 @@ describe("SessionManager", () => {
 		const firstBody = createBody("conv-456");
 
 		let context = manager.getContext(firstBody) as SessionContext;
-		context = manager.applyRequest(firstBody, context) as SessionContext;
+		const firstApply = manager.applyRequest(firstBody, context);
+		context = firstApply.context as SessionContext;
 
 		const secondBody = createBody("conv-456", 2);
 		let nextContext = manager.getContext(secondBody) as SessionContext;
 		expect(nextContext.isNew).toBe(false);
-		nextContext = manager.applyRequest(secondBody, nextContext) as SessionContext;
+		const secondApply = manager.applyRequest(secondBody, nextContext);
+		nextContext = secondApply.context as SessionContext;
 
-		expect(secondBody.prompt_cache_key).toBe("conv-456");
+		expect(secondApply.body.prompt_cache_key).toBe("conv-456");
 		expect(nextContext.state.lastInput.length).toBe(2);
 		expect(nextContext.state.promptCacheKey).toBe(context.state.promptCacheKey);
 	});
