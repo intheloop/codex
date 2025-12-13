@@ -1,16 +1,17 @@
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import { existsSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { logInfo, logWarn } from "../logger.js";
 import { CACHE_FILES } from "../utils/cache-config.js";
 import { getOpenCodePath, safeReadFile, safeWriteFile } from "../utils/file-system-utils.js";
+import packageInfo from "../../package.json";
+assert;
+{
+	type: "json";
+}
 
 const REGISTRY_URL = "https://registry.npmjs.org/@openhax/codex";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const REGISTRY_TIMEOUT_MS = 5000;
 const AUTO_UPDATE_TTL_MS = 15 * 60 * 1000; // match cache TTL
 
 const UPDATE_STATE_PATH = getOpenCodePath("cache", CACHE_FILES.AUTO_UPDATE_STATE);

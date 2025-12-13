@@ -195,17 +195,18 @@ export class SessionManager {
 		return state ? this.buildContext(state, !existing) : undefined;
 	}
 
-	public recordResponse(sessionId: string, response: CodexResponsePayload): void {
+	public recordResponse(session: string | SessionContext, response: CodexResponsePayload): void {
 		if (!this.options.enabled) {
 			return;
 		}
 
-		const state = this.sessions.get(sessionId);
+		const sessionId = typeof session === "string" ? session : session.sessionId;
+		const state = typeof session === "string" ? this.sessions.get(sessionId) : session.state;
 		if (!state) {
 			return;
 		}
 
-		const cachedTokens = response.usage?.prompt_tokens_details?.cached_tokens;
+		const cachedTokens = response.usage?.cached_tokens;
 		if (typeof cachedTokens === "number") {
 			state.lastCachedTokens = cachedTokens;
 			logDebug("SessionManager: response usage", {
@@ -214,6 +215,31 @@ export class SessionManager {
 			});
 		}
 		state.lastUpdated = Date.now();
+	}
+
+	public applyRequest(body: RequestBody, context?: SessionContext): SessionContext | undefined {
+		if (!this.options.enabled || !context) {
+			return context;
+		}
+
+		const state = context.state ?? this.sessions.get(context.sessionId);
+		if (!state) {
+			return context;
+		}
+
+		const nextInput = this.cloneInputItems(body.input);
+		state.lastInput = nextInput;
+		state.lastPrefixHash = nextInput.length ? computeHash(nextInput) : null;
+		state.lastUpdated = Date.now();
+
+		if (state.promptCacheKey) {
+			(body as any).prompt_cache_key = state.promptCacheKey;
+			(body as any).promptCacheKey = state.promptCacheKey;
+		}
+
+		context.isNew = false;
+		context.state = state;
+		return context;
 	}
 
 	public getMetrics(limit = 5): SessionMetricsSnapshot {
@@ -232,6 +258,16 @@ export class SessionManager {
 			enabled: this.options.enabled,
 			totalSessions: this.sessions.size,
 			recentSessions,
+		};
+	}
+
+	private buildContext(state: SessionState, isNew: boolean): SessionContext {
+		return {
+			sessionId: state.id,
+			enabled: this.options.enabled,
+			preserveIds: true,
+			isNew,
+			state,
 		};
 	}
 
@@ -300,55 +336,38 @@ export class SessionManager {
 
 	private analyzeInputChange(previous: InputItem[], current: InputItem[]): PrefixChangeAnalysis {
 		const sharedPrefixLength = longestSharedPrefixLength(previous, current);
-		const firstPrevious = previous[sharedPrefixLength];
-		const firstIncoming = current[sharedPrefixLength];
+		const baseAnalysis = _analyzePrefixChange(previous, current, sharedPrefixLength);
+		const details: Record<string, unknown> = {
+			...baseAnalysis.details,
+			sharedPrefixLength,
+		};
 
-		if (isSystemLike(firstPrevious) && isSystemLike(firstIncoming)) {
-			return {
-				cause: "system_prompt_changed",
-				details: {
-					mismatchIndex: sharedPrefixLength,
-					previousFingerprint: fingerprintInputItem(firstPrevious),
-					incomingFingerprint: fingerprintInputItem(firstIncoming),
-					previousRole: firstPrevious.role,
-					incomingRole: firstIncoming.role,
-				},
-			};
-		}
-
-		if (isSystemLike(firstPrevious) && !isSystemLike(firstIncoming)) {
-			return {
-				cause: "history_pruned",
-				details: {
-					mismatchIndex: sharedPrefixLength,
-					previousFingerprint: fingerprintInputItem(firstPrevious),
-					incomingFingerprint: fingerprintInputItem(firstIncoming),
-					previousRole: firstPrevious.role,
-					incomingRole: firstIncoming.role,
-				},
-			};
-		}
-
-		if (!isSystemLike(firstPrevious) && isSystemLike(firstIncoming)) {
-			return {
-				cause: "user_message_changed",
-				details: {
-					mismatchIndex: sharedPrefixLength,
-					previousFingerprint: fingerprintInputItem(firstPrevious),
-					incomingFingerprint: fingerprintInputItem(firstIncoming),
-					previousRole: firstPrevious?.role,
-					incomingRole: firstIncoming.role,
-				},
-			};
+		if (baseAnalysis.cause === "history_pruned") {
+			const removedCount = Math.max(0, previous.length - current.length);
+			if (removedCount > 0) {
+				details.removedCount = removedCount;
+				details.removedRoles = _summarizeRoles(previous.slice(0, removedCount));
+			}
+			const suffixReuseStart = _findSuffixReuseStart(previous, current);
+			if (suffixReuseStart !== null) {
+				details.suffixReuseStart = suffixReuseStart;
+			}
 		}
 
 		return {
-			cause: "unknown",
-			details: {
-				mismatchIndex: sharedPrefixLength,
-				previousRole: firstPrevious?.role,
-				incomingRole: firstIncoming?.role,
-			},
+			cause: baseAnalysis.cause,
+			details,
 		};
+	}
+
+	private cloneInputItems(input: InputItem[] | undefined): InputItem[] {
+		if (!Array.isArray(input)) {
+			return [];
+		}
+		try {
+			return JSON.parse(JSON.stringify(input)) as InputItem[];
+		} catch {
+			return input.map((item) => ({ ...item }));
+		}
 	}
 }

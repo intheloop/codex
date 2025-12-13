@@ -197,7 +197,6 @@ async function fetchInstructionsWithFallback(
 
 async function loadFromCacheOrBundled(
 	cacheFilePath: string,
-	cacheMetaPath: string,
 	cachedETag: string | null,
 	cachedTag: string | null,
 	cacheFileExists: boolean,
@@ -227,7 +226,7 @@ async function handleLatestTagFailure(
 	logWarn("Failed to get latest release tag; falling back to existing cache or bundled copy", {
 		error,
 	});
-	return loadFromCacheOrBundled(cacheFilePath, cacheMetaPath, cachedETag, cachedTag, cacheFileExists);
+	return loadFromCacheOrBundled(cacheFilePath, cachedETag, cachedTag, cacheFileExists);
 }
 
 async function checkFreshCache(
