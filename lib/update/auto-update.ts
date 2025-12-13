@@ -12,10 +12,7 @@ const packageInfo = require("../../package.json") as { version?: string };
 const REGISTRY_URL = "https://registry.npmjs.org/@openhax/codex";
 const REGISTRY_TIMEOUT_MS = 5000;
 const AUTO_UPDATE_TTL_MS = 15 * 60 * 1000; // match cache TTL
-const PACKAGE_VERSION =
-	typeof (packageInfo as { version?: string }).version === "string"
-		? (packageInfo as { version: string }).version
-		: null;
+const PACKAGE_VERSION = typeof packageInfo.version === "string" ? packageInfo.version : null;
 
 const UPDATE_STATE_PATH = getOpenCodePath("cache", CACHE_FILES.AUTO_UPDATE_STATE);
 
@@ -70,11 +67,14 @@ function isNewerVersion(current: string, latest: string): boolean {
 }
 
 async function fetchLatestVersion(): Promise<string | null> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), REGISTRY_TIMEOUT_MS);
 	try {
 		const response = await fetch(REGISTRY_URL, {
 			headers: {
 				accept: "application/vnd.npm.install-v1+json",
 			},
+			signal: controller.signal,
 		});
 		if (!response.ok) {
 			throw new Error(`registry responded ${response.status}`);
@@ -82,10 +82,13 @@ async function fetchLatestVersion(): Promise<string | null> {
 		const body = (await response.json()) as { "dist-tags"?: { latest?: string } };
 		return body?.["dist-tags"]?.latest ?? null;
 	} catch (error) {
+		const isAbort = error instanceof Error && error.name === "AbortError";
 		logWarn("Failed to fetch latest version from npm", {
-			error: error instanceof Error ? error.message : String(error),
+			error: isAbort ? "request timed out" : error instanceof Error ? error.message : String(error),
 		});
 		return null;
+	} finally {
+		clearTimeout(timeout);
 	}
 }
 

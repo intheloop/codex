@@ -53,7 +53,7 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 		return { auth: currentAuth };
 	}
 
-	function extractRequestMetrics(body: Record<string, unknown>) {
+	function extractRequestMetrics(requestUrl: string, body: Record<string, unknown>) {
 		const promptCacheKey = Boolean(body.prompt_cache_key ?? body.promptCacheKey);
 		const tools = Array.isArray(body.tools) ? (body.tools as unknown[]) : [];
 		const toolChoiceRaw = body.tool_choice;
@@ -72,9 +72,15 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 		const store = typeof body.store === "boolean" ? (body.store as boolean) : undefined;
 		const reasoning = body.reasoning as { effort?: unknown; summary?: unknown } | undefined;
 		const text = body.text as { verbosity?: unknown } | undefined;
+		let safeUrl = String(requestUrl);
+		try {
+			safeUrl = new URL(requestUrl).toString();
+		} catch {
+			// keep derived string form
+		}
 
 		return {
-			url,
+			url: safeUrl,
 			model: typeof body.model === "string" ? (body.model as string) : undefined,
 			promptCacheKey,
 			toolCount: tools.length,
@@ -114,7 +120,7 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 		}
 
 		if (transformation?.body) {
-			const metrics = extractRequestMetrics(transformation.body as Record<string, unknown>);
+			const metrics = extractRequestMetrics(url, transformation.body as Record<string, unknown>);
 			recordRequestMetrics(metrics);
 		}
 
