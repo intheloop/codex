@@ -119,20 +119,30 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 			}
 		}
 
-		if (transformation?.body) {
-			const metrics = extractRequestMetrics(url, transformation.body as Record<string, unknown>);
+		const transformedBody = transformation?.body;
+		let effectiveBody = transformedBody;
+		let effectiveContext = transformation?.sessionContext;
+
+		if (sessionManager && transformedBody) {
+			const applyResult = sessionManager.applyRequest(transformedBody, effectiveContext);
+			effectiveBody = applyResult.body;
+			effectiveContext = applyResult.context ?? effectiveContext;
+		}
+
+		if (effectiveBody) {
+			const metrics = extractRequestMetrics(url, effectiveBody as Record<string, unknown>);
 			recordRequestMetrics(metrics);
 		}
 
-		const hasTools = transformation?.body.tools !== undefined;
-		const requestInit = transformation?.updatedInit ?? init ?? {};
-		const sessionContext = transformation?.sessionContext;
+		const hasTools = effectiveBody?.tools !== undefined;
+		const requestInit: RequestInit = { ...(transformation?.updatedInit ?? init ?? {}) };
+		if (effectiveBody) {
+			requestInit.body = JSON.stringify(effectiveBody);
+		}
 		const accessToken = currentAuth.type === "oauth" ? currentAuth.access : "";
 		const headers = createCodexHeaders(requestInit, accountId, accessToken, {
-			model: transformation?.body.model,
-			promptCacheKey: (transformation?.body as Record<string, unknown> | undefined)?.prompt_cache_key as
-				| string
-				| undefined,
+			model: effectiveBody?.model,
+			promptCacheKey: effectiveBody?.prompt_cache_key,
 		});
 
 		const response = await fetch(url, { ...requestInit, headers });
@@ -151,7 +161,7 @@ export function createCodexFetcher(deps: CodexFetcherDeps) {
 
 		await recordSessionResponseFromHandledResponse({
 			sessionManager,
-			sessionContext,
+			sessionContext: effectiveContext,
 			handledResponse,
 		});
 

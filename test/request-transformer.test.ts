@@ -994,8 +994,9 @@ describe("transformRequestBody", () => {
 			{ preserveIds: sessionOne.preserveIds },
 			sessionOne,
 		);
-		sessionManager.applyRequest(firstTransform.body, sessionOne);
-		const cacheKey = firstTransform.body.prompt_cache_key;
+		const firstApply = sessionManager.applyRequest(firstTransform.body, sessionOne);
+		const cacheKey = firstApply.body.prompt_cache_key;
+		const sessionOneUpdated = firstApply.context ?? sessionOne;
 
 		expect(firstTransform.body.input?.[0].role).toBe("developer");
 
@@ -1014,10 +1015,11 @@ describe("transformRequestBody", () => {
 			{ preserveIds: sessionTwo.preserveIds },
 			sessionTwo,
 		);
-		const appliedContext = sessionManager.applyRequest(secondTransform.body, sessionTwo);
+		const applied = sessionManager.applyRequest(secondTransform.body, sessionTwo);
+		const appliedContext = applied.context ?? sessionOneUpdated;
 
 		expect(secondTransform.body.input?.[0].role).toBe("developer");
-		expect(secondTransform.body.prompt_cache_key).toBe(cacheKey);
+		expect(applied.body.prompt_cache_key).toBe(cacheKey);
 		expect(appliedContext?.isNew).toBe(false);
 	});
 

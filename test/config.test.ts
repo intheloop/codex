@@ -149,6 +149,7 @@ describe("Configuration Parsing", () => {
 
 			const xhigh = getReasoningConfig("gpt-5.2", { reasoningEffort: "xhigh" });
 			expect(xhigh.effort).toBe("xhigh");
+			expect(xhigh.summary).toBe("auto");
 		});
 
 		it("normalizes minimal/none to low for gpt-5.2", () => {

@@ -183,7 +183,7 @@ export class SessionManager {
 		const conversationId = extractConversationId(body);
 		const forkId = extractForkIdentifier(body);
 		if (!conversationId) {
-			const hostCacheKey = (body as any).prompt_cache_key || (body as any).promptCacheKey;
+			const hostCacheKey = body.prompt_cache_key || body.promptCacheKey;
 			if (hostCacheKey && typeof hostCacheKey === "string") {
 				const existingState = this.sessions.get(hostCacheKey);
 				const state = existingState ?? this.resetSessionInternal(hostCacheKey);
@@ -239,29 +239,39 @@ export class SessionManager {
 		state.lastUpdated = Date.now();
 	}
 
-	public applyRequest(body: RequestBody, context?: SessionContext): SessionContext | undefined {
+	public applyRequest(body: RequestBody, context?: SessionContext): SessionApplyResult {
+		const clonedBody = this.cloneRequestBody(body);
+
 		if (!this.options.enabled || !context) {
-			return context;
+			return { body: clonedBody, context };
 		}
 
-		const state = context.state ?? this.sessions.get(context.sessionId);
-		if (!state) {
-			return context;
+		const existingState = this.sessions.get(context.sessionId) ?? context.state;
+		if (!existingState) {
+			return { body: clonedBody, context };
 		}
 
-		const nextInput = this.cloneInputItems(body.input);
-		state.lastInput = nextInput;
-		state.lastPrefixHash = nextInput.length ? computeHash(nextInput) : null;
-		state.lastUpdated = Date.now();
+		const nextInput = this.cloneInputItems(clonedBody.input);
+		const newState: SessionState = {
+			...existingState,
+			lastInput: nextInput,
+			lastPrefixHash: nextInput.length ? computeHash(nextInput) : null,
+			lastUpdated: Date.now(),
+		};
+		this.sessions.set(newState.id, newState);
 
-		if (state.promptCacheKey) {
-			(body as any).prompt_cache_key = state.promptCacheKey;
-			(body as any).promptCacheKey = state.promptCacheKey;
+		const updatedContext: SessionContext = {
+			...context,
+			isNew: false,
+			state: newState,
+		};
+
+		if (newState.promptCacheKey) {
+			clonedBody.prompt_cache_key = newState.promptCacheKey;
+			clonedBody.promptCacheKey = newState.promptCacheKey;
 		}
 
-		context.isNew = false;
-		context.state = state;
-		return context;
+		return { body: clonedBody, context: updatedContext };
 	}
 
 	public getMetrics(limit = 5): SessionMetricsSnapshot {
@@ -382,6 +392,18 @@ export class SessionManager {
 		return {
 			cause: baseAnalysis.cause,
 			details,
+		};
+	}
+
+	private cloneRequestBody(body: RequestBody): RequestBody {
+		const clonedInput = body.input ? this.cloneInputItems(body.input) : undefined;
+		return {
+			...body,
+			input: clonedInput,
+			metadata: body.metadata ? { ...body.metadata } : undefined,
+			include: body.include ? [...body.include] : undefined,
+			text: body.text ? { ...body.text } : undefined,
+			reasoning: body.reasoning ? { ...body.reasoning } : undefined,
 		};
 	}
 
