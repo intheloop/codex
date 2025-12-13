@@ -520,7 +520,7 @@ When no configuration is specified, the plugin uses these defaults for all GPT-5
 - **`reasoningSummary: "auto"`** - Automatically adapts summary verbosity
 - **`textVerbosity: "medium"`** - Balanced output length
 
-These defaults match the official Codex CLI behavior and can be customized (see Configuration below). GPT-5.1 requests automatically start at `reasoningEffort: "none"`, while Codex/Codex Mini presets continue to clamp to their supported levels.
+These defaults match the official Codex CLI behavior and can be customized (see Configuration below). GPT-5.1 requests automatically start at `reasoningEffort: "none"`, while Codex/Codex Mini presets continue to clamp to their supported levels, and GPT-5.2 keeps `reasoningEffort: "medium"` but accepts `xhigh` while mapping `none`/`minimal` to `low`.
 
 ## Configuration Reference
 

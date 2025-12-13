@@ -169,7 +169,7 @@ This plugin **intentionally differs from opencode defaults** because it accesses
 | `store`            | true             | false                             | Required for ChatGPT backend                   |
 | `include`          | (not set)        | `["reasoning.encrypted_content"]` | Required for stateless operation               |
 
-> **Extra High reasoning**: `reasoningEffort: "xhigh"` is only honored for `gpt-5.1-codex-max`. Other models automatically downgrade it to `high` so their API calls remain valid.
+> **Extra High reasoning**: `reasoningEffort: "xhigh"` is honored for `gpt-5.1-codex-max` and `gpt-5.2`. Other models automatically downgrade it to `high` so their API calls remain valid.
 
 ## File Paths & Locations
 

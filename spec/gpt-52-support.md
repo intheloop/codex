@@ -49,3 +49,4 @@
 ## Change Log
 
 - 2025-12-12: Initial spec drafted for GPT-5.2 normalization, reasoning, tests, and documentation updates.
+- 2025-12-12: Implemented normalization/reasoning changes, added config + script entries, updated docs, and verified tests for GPT-5.2 support.
