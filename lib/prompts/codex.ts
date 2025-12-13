@@ -217,7 +217,6 @@ async function loadFromCacheOrBundled(
 
 async function handleLatestTagFailure(
 	cacheFilePath: string,
-	cacheMetaPath: string,
 	cachedETag: string | null,
 	cachedTag: string | null,
 	cacheFileExists: boolean,
@@ -287,14 +286,7 @@ export async function getCodexInstructions(): Promise<string> {
 	try {
 		latestTag = await getLatestReleaseTag();
 	} catch (error) {
-		return handleLatestTagFailure(
-			cacheFilePath,
-			cacheMetaPath,
-			cachedETag,
-			cachedTag,
-			cacheFileExists,
-			error,
-		);
+		return handleLatestTagFailure(cacheFilePath, cachedETag, cachedTag, cacheFileExists, error);
 	}
 
 	if (!latestTag) {
