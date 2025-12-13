@@ -1,14 +1,13 @@
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import { existsSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { logInfo, logWarn } from "../logger.js";
 import { CACHE_FILES } from "../utils/cache-config.js";
 import { getOpenCodePath, safeReadFile, safeWriteFile } from "../utils/file-system-utils.js";
-import packageInfo from "../../package.json";
-assert;
-{
-	type: "json";
-}
+
+const require = createRequire(import.meta.url);
+const packageInfo = require("../../package.json") as { version?: string };
 
 const REGISTRY_URL = "https://registry.npmjs.org/@openhax/codex";
 const REGISTRY_TIMEOUT_MS = 5000;
@@ -121,7 +120,8 @@ function clearOldInstallArtifacts(): { removed: string[]; failed: string[] } {
 	const removed: string[] = [];
 	const failed: string[] = [];
 
-	const pluginPath = join(homedir(), ".cache", "opencode", "node_modules", "@openhax", "codex");
+	const pluginCacheRoot = getOpenCodePath("cache");
+	const pluginPath = join(pluginCacheRoot, "node_modules", "@openhax", "codex");
 	const cacheFiles = [
 		getOpenCodePath("cache", CACHE_FILES.CODEX_INSTRUCTIONS),
 		getOpenCodePath("cache", CACHE_FILES.CODEX_INSTRUCTIONS_META),
