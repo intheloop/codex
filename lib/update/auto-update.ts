@@ -66,33 +66,32 @@ function parseSemver(version: string): { core: number[]; prerelease: (number | s
 	return { core, prerelease };
 }
 
-function compareSemver(a: string, b: string): number {
-	const parsedA = parseSemver(a);
-	const parsedB = parseSemver(b);
-	const maxLength = Math.max(parsedA.core.length, parsedB.core.length);
+function compareCoreParts(coreA: number[], coreB: number[]): number {
+	const maxLength = Math.max(coreA.length, coreB.length);
 	for (let index = 0; index < maxLength; index += 1) {
-		const partA = parsedA.core[index] ?? 0;
-		const partB = parsedB.core[index] ?? 0;
+		const partA = coreA[index] ?? 0;
+		const partB = coreB[index] ?? 0;
 		if (partA > partB) return 1;
 		if (partA < partB) return -1;
 	}
+	return 0;
+}
 
-	const prereleaseA = parsedA.prerelease;
-	const prereleaseB = parsedB.prerelease;
-	if (prereleaseA.length === 0 && prereleaseB.length === 0) {
+function comparePrereleaseParts(a: (number | string)[], b: (number | string)[]): number {
+	if (a.length === 0 && b.length === 0) {
 		return 0;
 	}
-	if (prereleaseA.length === 0) {
+	if (a.length === 0) {
 		return 1;
 	}
-	if (prereleaseB.length === 0) {
+	if (b.length === 0) {
 		return -1;
 	}
 
-	const maxPre = Math.max(prereleaseA.length, prereleaseB.length);
+	const maxPre = Math.max(a.length, b.length);
 	for (let index = 0; index < maxPre; index += 1) {
-		const idA = prereleaseA[index];
-		const idB = prereleaseB[index];
+		const idA = a[index];
+		const idB = b[index];
 		if (idA === undefined) return -1;
 		if (idB === undefined) return 1;
 		if (typeof idA === "number" && typeof idB === "number") {
@@ -111,6 +110,16 @@ function compareSemver(a: string, b: string): number {
 	}
 
 	return 0;
+}
+
+function compareSemver(a: string, b: string): number {
+	const parsedA = parseSemver(a);
+	const parsedB = parseSemver(b);
+	const coreComparison = compareCoreParts(parsedA.core, parsedB.core);
+	if (coreComparison !== 0) {
+		return coreComparison;
+	}
+	return comparePrereleaseParts(parsedA.prerelease, parsedB.prerelease);
 }
 
 function isNewerVersion(current: string, latest: string): boolean {

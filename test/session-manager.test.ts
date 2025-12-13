@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SESSION_CONFIG } from "../lib/constants.js";
 import { SessionManager } from "../lib/session/session-manager.js";
 import * as logger from "../lib/logger.js";
-import type { RequestBody, SessionContext } from "../lib/types.js";
+import type { RequestBody } from "../lib/types.js";
 
 interface BodyOptions {
 	forkId?: string;
@@ -264,7 +264,7 @@ describe("SessionManager", () => {
 		expect(alphaContext.state.promptCacheKey).toBe("conv-fork::fork::alpha");
 
 		const repeatAlpha = createBody("conv-fork", 2, { forkId: "alpha" });
-		let repeatedContext = manager.getContext(repeatAlpha)!;
+		const repeatedContext = manager.getContext(repeatAlpha)!;
 		expect(repeatedContext.isNew).toBe(false);
 		const repeatApply = manager.applyRequest(repeatAlpha, repeatedContext);
 		expect(repeatApply.body.prompt_cache_key).toBe("conv-fork::fork::alpha");
