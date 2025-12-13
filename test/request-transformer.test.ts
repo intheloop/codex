@@ -100,6 +100,8 @@ describe("normalizeModel", () => {
 		expect(normalizeModel("gpt-5.2")).toBe("gpt-5.2");
 		expect(normalizeModel("gpt-5.2-high")).toBe("gpt-5.2");
 		expect(normalizeModel("openai/gpt52")).toBe("gpt-5.2");
+		expect(normalizeModel("gpt52")).toBe("gpt-5.2");
+		expect(normalizeModel("openai/gpt-5.2")).toBe("gpt-5.2");
 	});
 
 	it("should handle mixed case", async () => {

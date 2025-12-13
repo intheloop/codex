@@ -251,7 +251,7 @@ export class SessionManager {
 			return { body: clonedBody, context };
 		}
 
-		const nextInput = this.cloneInputItems(clonedBody.input);
+		const nextInput = Array.isArray(clonedBody.input) ? this.cloneInputItems(clonedBody.input) : [];
 		const newState: SessionState = {
 			...existingState,
 			lastInput: nextInput,
@@ -396,21 +396,22 @@ export class SessionManager {
 	}
 
 	private cloneRequestBody(body: RequestBody): RequestBody {
-		const clonedInput = body.input ? this.cloneInputItems(body.input) : undefined;
-		return {
+		const cloned: RequestBody = {
 			...body,
-			input: clonedInput,
 			metadata: body.metadata ? { ...body.metadata } : undefined,
 			include: body.include ? [...body.include] : undefined,
 			text: body.text ? { ...body.text } : undefined,
 			reasoning: body.reasoning ? { ...body.reasoning } : undefined,
 		};
+
+		if (Array.isArray(body.input)) {
+			cloned.input = this.cloneInputItems(body.input);
+		}
+
+		return cloned;
 	}
 
-	private cloneInputItems(input: InputItem[] | undefined): InputItem[] {
-		if (!Array.isArray(input)) {
-			return [];
-		}
+	private cloneInputItems(input: InputItem[]): InputItem[] {
 		try {
 			return JSON.parse(JSON.stringify(input)) as InputItem[];
 		} catch {
