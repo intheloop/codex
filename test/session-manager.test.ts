@@ -195,11 +195,12 @@ describe("SessionManager", () => {
 		const body = createBody("conv-usage");
 
 		const context = manager.getContext(body) as SessionContext;
-		manager.applyRequest(body, context);
+		const applyResult = manager.applyRequest(body, context);
+		const updatedContext = applyResult.context as SessionContext;
 
-		manager.recordResponse(context, { usage: { cached_tokens: 42 } });
+		manager.recordResponse(updatedContext, { usage: { cached_tokens: 42 } });
 
-		expect(context.state.lastCachedTokens).toBe(42);
+		expect(updatedContext.state.lastCachedTokens).toBe(42);
 	});
 
 	it("reports metrics snapshot with recent sessions", () => {
