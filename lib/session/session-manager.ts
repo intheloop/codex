@@ -350,20 +350,22 @@ export class SessionManager {
 	}
 
 	private analyzeInputChange(previous: InputItem[], current: InputItem[]): PrefixChangeAnalysis {
-		const sharedPrefixLength = longestSharedPrefixLength(previous, current);
-		const baseAnalysis = _analyzePrefixChange(previous, current, sharedPrefixLength);
+		const normalizedPrevious = this.normalizeInputForComparison(previous);
+		const normalizedCurrent = this.normalizeInputForComparison(current);
+		const sharedPrefixLength = longestSharedPrefixLength(normalizedPrevious, normalizedCurrent);
+		const baseAnalysis = _analyzePrefixChange(normalizedPrevious, normalizedCurrent, sharedPrefixLength);
 		const details: Record<string, unknown> = {
 			...baseAnalysis.details,
 			sharedPrefixLength,
 		};
 
 		if (baseAnalysis.cause === "history_pruned") {
-			const removedCount = Math.max(0, previous.length - current.length);
+			const removedCount = Math.max(0, normalizedPrevious.length - normalizedCurrent.length);
 			if (removedCount > 0) {
 				details.removedCount = removedCount;
-				details.removedRoles = _summarizeRoles(previous.slice(0, removedCount));
+				details.removedRoles = _summarizeRoles(normalizedPrevious.slice(0, removedCount));
 			}
-			const suffixReuseStart = _findSuffixReuseStart(previous, current);
+			const suffixReuseStart = _findSuffixReuseStart(normalizedPrevious, normalizedCurrent);
 			if (suffixReuseStart !== null) {
 				details.suffixReuseStart = suffixReuseStart;
 			}
@@ -384,5 +386,47 @@ export class SessionManager {
 		} catch {
 			return input.map((item) => ({ ...item }));
 		}
+	}
+
+	private normalizeInputForComparison(items: InputItem[]): InputItem[] {
+		return items.filter((item) => !this.isEnvContextMessage(item));
+	}
+
+	private isEnvContextMessage(item: InputItem | undefined): boolean {
+		if (!item || typeof item.role !== "string") {
+			return false;
+		}
+		const role = item.role.toLowerCase();
+		if (role !== "system" && role !== "developer") {
+			return false;
+		}
+
+		const content = item.content;
+		let text = "";
+		if (typeof content === "string") {
+			text = content;
+		} else if (Array.isArray(content)) {
+			text = content
+				.map((segment) => {
+					if (typeof segment === "string") {
+						return segment;
+					}
+					if (segment && typeof segment === "object" && "text" in segment) {
+						const value = (segment as { text?: unknown }).text;
+						return typeof value === "string" ? value : "";
+					}
+					return "";
+				})
+				.join("\n");
+		}
+
+		const normalized = text.toLowerCase();
+		return (
+			normalized.includes("<env>") ||
+			normalized.includes("</env>") ||
+			normalized.includes("<files>") ||
+			normalized.includes("</files>") ||
+			normalized.includes("here is some useful information about the environment")
+		);
 	}
 }
