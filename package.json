@@ -1,7 +1,7 @@
 {
-  "name": "@openhax/codex",
+  "name": "@intheloop/codex",
   "version": "1.0.0",
-  "description": "OpenHax Codex OAuth plugin for Opencode — bring your ChatGPT Plus/Pro subscription instead of API credits",
+  "description": "Intheloop's fork of OpenHax Codex OAuth plugin for Opencode — bring your ChatGPT Plus/Pro subscription instead of API credits",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "type": "module",
