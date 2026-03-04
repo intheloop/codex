@@ -14,8 +14,7 @@ import { CACHE_FILES, CACHE_TTL_MS, LEGACY_CACHE_FILES, PLUGIN_PREFIX } from "..
 import { getOpenCodePath } from "../utils/file-system-utils.js";
 
 const OPENCODE_CODEX_URLS = [
-	"https://raw.githubusercontent.com/sst/opencode/dev/packages/opencode/src/session/prompt/codex.txt",
-	"https://raw.githubusercontent.com/sst/opencode/main/packages/opencode/src/session/prompt/codex.txt",
+	"https://raw.githubusercontent.com/intheloop/codex/refs/heads/dev/codex.txt",
 ];
 
 interface OpenCodeCacheMeta {
