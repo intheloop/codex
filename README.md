@@ -17,7 +17,7 @@ This plugin enables opencode to use OpenAI's Codex backend via ChatGPT Plus/Pro 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["@openhax/codex"],
+  "plugin": ["@intheloop/codex"],
   "model": "openai/gpt-5.1-codex-max",
   "provider": {
     "openai": {
